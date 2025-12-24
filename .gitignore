@@ -1,0 +1,20 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Local env / secrets
+.env
+
+# Virtualenv
+.venv/
+
+# SQLite audit DBs
+*.sqlite3
+*.sqlite
+
+# OS/editor
+.idea/
+.vscode/
+
