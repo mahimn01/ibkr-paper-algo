@@ -93,24 +93,13 @@ class GeminiClient(LLMClient):
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "Accept": "text/event-stream"},
             method="POST",
         )
         try:
             with urllib.request.urlopen(req, timeout=float(self.timeout_s)) as resp:
-                # Gemini streaming responses are typically SSE (lines prefixed with "data: ").
-                for raw_line in resp:
-                    line = raw_line.decode("utf-8", errors="ignore").strip()
-                    if not line:
-                        continue
-                    if line.startswith("data:"):
-                        line = line[len("data:") :].strip()
-                    if not line or line == "[DONE]":
-                        continue
-                    try:
-                        obj = json.loads(line)
-                    except Exception:
-                        continue
+                # Gemini streaming responses are SSE. Parse multi-line events robustly.
+                for obj in _iter_sse_json_objects(resp):
                     chunk = _extract_text(obj)
                     if chunk:
                         yield chunk
@@ -125,6 +114,48 @@ def _extract_text(data: object) -> str:
         return "".join(str(p.get("text", "")) for p in parts)
     except Exception:
         return ""
+
+
+def _iter_sse_json_objects(resp) -> "list[object] | Any":
+    """
+    Parse SSE stream into JSON objects.
+
+    SSE events are separated by a blank line. Each event may contain multiple `data:` lines.
+    """
+    data_lines: list[str] = []
+    for raw in resp:
+        line = raw.decode("utf-8", errors="ignore").rstrip("\r\n")
+        if line == "":
+            if not data_lines:
+                continue
+            payload = "\n".join(data_lines).strip()
+            data_lines = []
+            if not payload or payload == "[DONE]":
+                continue
+            try:
+                yield json.loads(payload)
+            except Exception:
+                continue
+            continue
+
+        # Ignore comments / event types.
+        if line.startswith(":") or line.startswith("event:"):
+            continue
+        if line.startswith("data:"):
+            data_lines.append(line[len("data:") :].lstrip())
+            continue
+        # Some implementations may send raw JSON without `data:` prefix; support that.
+        if line.startswith("{") or line.startswith("["):
+            data_lines.append(line)
+
+    # Flush if stream ends without trailing blank line.
+    if data_lines:
+        payload = "\n".join(data_lines).strip()
+        if payload and payload != "[DONE]":
+            try:
+                yield json.loads(payload)
+            except Exception:
+                return
 
 
 def _format_http_error(exc: HTTPError) -> str:

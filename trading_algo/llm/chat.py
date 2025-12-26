@@ -133,7 +133,11 @@ class ChatSession:
                         on_stream_token(str(chunk))
             else:
                 raise
-        return "".join(buf)
+        text = "".join(buf)
+        if text.strip() == "":
+            # If streaming yields nothing (e.g. SSE parsing differences), fall back to non-streaming.
+            return self.client.generate(prompt=prompt, system=_SYSTEM_PROMPT, use_google_search=use_search)
+        return text
 
     def _execute_tool(self, call: ToolCall, oms: OrderManager) -> tuple[bool, Any]:
         try:
