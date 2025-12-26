@@ -555,6 +555,8 @@ def _cmd_llm_run(args: argparse.Namespace) -> int:
         raise SystemExit("LLM_ENABLED must be true for llm-run")
     if not llm_cfg.gemini_api_key:
         raise SystemExit("GEMINI_API_KEY must be set for llm-run")
+    if not str(llm_cfg.gemini_model).startswith("gemini-3"):
+        raise SystemExit(f"Refusing to run with GEMINI_MODEL={llm_cfg.gemini_model!r}; set GEMINI_MODEL=gemini-3")
     if not llm_cfg.allowed_symbols():
         raise SystemExit("LLM_ALLOWED_SYMBOLS must be set (comma-separated)")
 

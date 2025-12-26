@@ -217,6 +217,9 @@ def main(argv: list[str] | None = None) -> int:
         ibkr=ibkr,
     )
 
+    if not str(llm_cfg.gemini_model).startswith("gemini-3"):
+        raise SystemExit(f"Refusing to run with GEMINI_MODEL={llm_cfg.gemini_model!r}; set GEMINI_MODEL=gemini-3")
+
     if cfg.broker == "sim":
         from trading_algo.broker.sim import SimBroker
 
