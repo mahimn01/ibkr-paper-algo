@@ -107,6 +107,18 @@ class OrderManager:
             return
         self._store.log_decision(self._run_id, strategy=str(strategy), intent=intent, accepted=accepted, reason=reason)
 
+    def log_action(self, actor: str, *, payload: dict[str, object], accepted: bool, reason: str | None) -> None:
+        if self._store is None or self._run_id is None:
+            return
+        # For non-TradeIntent actions (LLM modify/cancel, etc).
+        self._store.log_action(
+            self._run_id,
+            actor=str(actor),
+            payload=dict(payload) if isinstance(payload, dict) else {"payload": str(payload)},
+            accepted=accepted,
+            reason=reason,
+        )
+
     def modify(self, order_id: str, new_req: OrderRequest) -> OMSResult:
         new_req = new_req.normalized()
         self._authorize_send()

@@ -132,6 +132,28 @@ class SqliteStore:
         )
         self._conn.commit()
 
+    def log_action(
+        self,
+        run_id: int,
+        *,
+        actor: str,
+        payload: dict[str, Any],
+        accepted: bool,
+        reason: str | None,
+    ) -> None:
+        self._conn.execute(
+            "INSERT INTO actions(run_id, ts_epoch_s, actor, payload_json, accepted, reason) VALUES(?, ?, ?, ?, ?, ?)",
+            (
+                int(run_id),
+                time.time(),
+                str(actor),
+                json.dumps(_to_jsonable(payload), sort_keys=True),
+                1 if accepted else 0,
+                reason,
+            ),
+        )
+        self._conn.commit()
+
     def _ensure_schema(self) -> None:
         self._conn.executescript(
             """
@@ -197,6 +219,17 @@ class SqliteStore:
                 ts_epoch_s REAL NOT NULL,
                 where_text TEXT NOT NULL,
                 message TEXT NOT NULL,
+                FOREIGN KEY(run_id) REFERENCES runs(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS actions(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id INTEGER NOT NULL,
+                ts_epoch_s REAL NOT NULL,
+                actor TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                accepted INTEGER NOT NULL,
+                reason TEXT,
                 FOREIGN KEY(run_id) REFERENCES runs(id)
             );
             """

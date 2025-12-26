@@ -108,6 +108,10 @@ python3 -m trading_algo.cli place-bracket --broker ibkr --kind STK --symbol AAPL
 python3 -m unittest discover -s tests
 ```
 
+## LLM trader (optional)
+
+See `docs/LLM_TRADER.md`.
+
 ## SQLite audit trail
 
 Set `TRADING_DB_PATH=trading_audit.sqlite3` and the CLI/Engine will log:
@@ -123,3 +127,4 @@ Set `TRADING_DB_PATH=trading_audit.sqlite3` and the CLI/Engine will log:
 - `docs/SAFETY.md`
 - `docs/WORKFLOWS.md`
 - `docs/DB_SCHEMA.md`
+- `docs/LLM_TRADER.md`

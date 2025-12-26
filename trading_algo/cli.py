@@ -540,6 +540,46 @@ def _cmd_export_history(args: argparse.Namespace) -> int:
         broker.disconnect()
 
 
+def _cmd_llm_run(args: argparse.Namespace) -> int:
+    cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
+
+    from trading_algo.llm.config import LLMConfig
+    from trading_algo.llm.gemini import GeminiClient
+    from trading_algo.llm.trader import LLMTrader
+    from trading_algo.risk import RiskLimits, RiskManager
+
+    llm_cfg = LLMConfig.from_env()
+    if llm_cfg.provider != "gemini":
+        raise SystemExit("LLM_PROVIDER must be 'gemini' for llm-run")
+    if not llm_cfg.enabled:
+        raise SystemExit("LLM_ENABLED must be true for llm-run")
+    if not llm_cfg.gemini_api_key:
+        raise SystemExit("GEMINI_API_KEY must be set for llm-run")
+    if not llm_cfg.allowed_symbols():
+        raise SystemExit("LLM_ALLOWED_SYMBOLS must be set (comma-separated)")
+
+    if args.broker == "ibkr":
+        # Orders go through OMS gates too, but keep explicit CLI auth for clarity.
+        _assert_ibkr_order_authorized(cfg, args.confirm_token)
+
+    broker = _make_broker(args.broker, cfg)
+    trader = LLMTrader(
+        broker=broker,
+        trading=cfg,
+        llm=llm_cfg,
+        client=GeminiClient(api_key=llm_cfg.gemini_api_key, model=llm_cfg.gemini_model),
+        risk=RiskManager(RiskLimits()),
+        confirm_token=args.confirm_token,
+        sleep_seconds=float(args.sleep_seconds),
+        max_ticks=(int(args.max_ticks) if args.max_ticks is not None else None),
+    )
+    if args.once:
+        trader.run_once()
+    else:
+        trader.run()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="trading-algo", description="IBKR paper trading algo skeleton")
     p.add_argument("--log-level", default="INFO", help="DEBUG|INFO|WARNING|ERROR")
@@ -703,6 +743,13 @@ def build_parser() -> argparse.ArgumentParser:
     exp.add_argument("--max-calls", default="500")
     exp.add_argument("--validate", action="store_true")
     exp.set_defaults(func=_cmd_export_history)
+
+    llm_run = sub.add_parser("llm-run", help="Run the LLM trader loop (paper-only enforced)")
+    llm_run.add_argument("--broker", choices=["ibkr", "sim"], default="sim")
+    llm_run.add_argument("--sleep-seconds", type=float, default=5.0)
+    llm_run.add_argument("--max-ticks", type=int, default=None)
+    llm_run.add_argument("--once", action="store_true", help="Run exactly one LLM tick")
+    llm_run.set_defaults(func=_cmd_llm_run)
 
     return p
 
