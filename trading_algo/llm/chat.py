@@ -81,7 +81,12 @@ class ChatSession:
         try:
             last_reply: ChatModelReply | None = None
             for _round in range(int(self.max_tool_rounds)):
-                raw = self._call_model(on_stream_token=on_stream_token)
+                try:
+                    raw = self._call_model(on_stream_token=on_stream_token)
+                except Exception as exc:
+                    msg = f"LLM request failed: {exc}"
+                    self._messages.append({"role": "assistant", "text": msg})
+                    return ChatModelReply(assistant_message=msg, tool_calls=[])
                 if self.show_raw:
                     self._messages.append({"role": "assistant", "text": raw})
                 reply = parse_chat_model_reply(raw)
@@ -102,18 +107,32 @@ class ChatSession:
 
     def _call_model(self, *, on_stream_token: Callable[[str], None] | None) -> str:
         prompt = _build_prompt(self._messages, self.llm.allowed_symbols(), self.llm.allowed_kinds(), list_tools())
+        use_search = bool(self.llm.gemini_use_google_search)
         if not self.stream:
-            return self.client.generate(prompt=prompt, system=_SYSTEM_PROMPT, use_google_search=bool(self.llm.gemini_use_google_search))
+            try:
+                return self.client.generate(prompt=prompt, system=_SYSTEM_PROMPT, use_google_search=use_search)
+            except Exception:
+                # Grounding can be restricted; retry without it.
+                if use_search:
+                    return self.client.generate(prompt=prompt, system=_SYSTEM_PROMPT, use_google_search=False)
+                raise
 
         buf: list[str] = []
-        for chunk in self.client.stream_generate(
-            prompt=prompt,
-            system=_SYSTEM_PROMPT,
-            use_google_search=bool(self.llm.gemini_use_google_search),
-        ):
-            buf.append(str(chunk))
-            if on_stream_token is not None:
-                on_stream_token(str(chunk))
+        try:
+            for chunk in self.client.stream_generate(prompt=prompt, system=_SYSTEM_PROMPT, use_google_search=use_search):
+                buf.append(str(chunk))
+                if on_stream_token is not None:
+                    on_stream_token(str(chunk))
+        except Exception:
+            # Retry once without Google Search if grounding causes request errors.
+            if use_search:
+                buf = []
+                for chunk in self.client.stream_generate(prompt=prompt, system=_SYSTEM_PROMPT, use_google_search=False):
+                    buf.append(str(chunk))
+                    if on_stream_token is not None:
+                        on_stream_token(str(chunk))
+            else:
+                raise
         return "".join(buf)
 
     def _execute_tool(self, call: ToolCall, oms: OrderManager) -> tuple[bool, Any]:
@@ -219,6 +238,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if not str(llm_cfg.gemini_model).startswith("gemini-3"):
         raise SystemExit(f"Refusing to run with GEMINI_MODEL={llm_cfg.gemini_model!r}; set GEMINI_MODEL=gemini-3")
+    if not llm_cfg.gemini_api_key:
+        raise SystemExit("GEMINI_API_KEY is empty; set it in .env or your shell to use chat.")
 
     if cfg.broker == "sim":
         from trading_algo.broker.sim import SimBroker
@@ -284,10 +305,17 @@ def main(argv: list[str] | None = None) -> int:
             def _on_tool(call: ToolCall, ok: bool, result: Any) -> None:
                 executed.append((call, ok, result))
 
-            reply = session.run_turn(
-                on_stream_token=_on_token if session.stream else None,
-                on_tool_executed=_on_tool,
-            )
+            try:
+                reply = session.run_turn(
+                    on_stream_token=_on_token if session.stream else None,
+                    on_tool_executed=_on_tool,
+                )
+            except Exception as exc:
+                # Never crash the UI; keep the broker connected and continue.
+                if session.stream:
+                    print()
+                print(f"{_c('1;31')}error:{_reset()} {exc}")
+                continue
             if session.stream:
                 print()
 

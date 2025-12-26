@@ -5,6 +5,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Protocol
+from urllib.error import HTTPError
 
 
 class LLMClient(Protocol):
@@ -52,8 +53,11 @@ class GeminiClient(LLMClient):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=float(self.timeout_s)) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(req, timeout=float(self.timeout_s)) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except HTTPError as exc:
+            raise RuntimeError(_format_http_error(exc)) from exc
         try:
             # candidates[0].content.parts[].text
             parts = data["candidates"][0]["content"]["parts"]
@@ -75,7 +79,7 @@ class GeminiClient(LLMClient):
 
         url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{urllib.parse.quote(self.model)}:streamGenerateContent?key={urllib.parse.quote(self.api_key)}"
+            f"{urllib.parse.quote(self.model)}:streamGenerateContent?alt=sse&key={urllib.parse.quote(self.api_key)}"
         )
         payload: dict[str, object] = {
             "contents": [{"role": "user", "parts": [{"text": str(prompt)}]}],
@@ -92,23 +96,26 @@ class GeminiClient(LLMClient):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=float(self.timeout_s)) as resp:
-            # Gemini streaming responses are typically SSE (lines prefixed with "data: ").
-            for raw_line in resp:
-                line = raw_line.decode("utf-8", errors="ignore").strip()
-                if not line:
-                    continue
-                if line.startswith("data:"):
-                    line = line[len("data:") :].strip()
-                if not line or line == "[DONE]":
-                    continue
-                try:
-                    obj = json.loads(line)
-                except Exception:
-                    continue
-                chunk = _extract_text(obj)
-                if chunk:
-                    yield chunk
+        try:
+            with urllib.request.urlopen(req, timeout=float(self.timeout_s)) as resp:
+                # Gemini streaming responses are typically SSE (lines prefixed with "data: ").
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8", errors="ignore").strip()
+                    if not line:
+                        continue
+                    if line.startswith("data:"):
+                        line = line[len("data:") :].strip()
+                    if not line or line == "[DONE]":
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except Exception:
+                        continue
+                    chunk = _extract_text(obj)
+                    if chunk:
+                        yield chunk
+        except HTTPError as exc:
+            raise RuntimeError(_format_http_error(exc)) from exc
 
 
 def _extract_text(data: object) -> str:
@@ -118,3 +125,23 @@ def _extract_text(data: object) -> str:
         return "".join(str(p.get("text", "")) for p in parts)
     except Exception:
         return ""
+
+
+def _format_http_error(exc: HTTPError) -> str:
+    try:
+        body = exc.read().decode("utf-8", errors="ignore")
+    except Exception:
+        body = ""
+    detail = body.strip()
+    try:
+        j = json.loads(detail)
+        # Common shape: {"error":{"code":400,"message":"...","status":"INVALID_ARGUMENT"}}
+        if isinstance(j, dict) and "error" in j and isinstance(j["error"], dict):
+            err = j["error"]
+            msg = err.get("message") or detail
+            status = err.get("status") or ""
+            code = err.get("code") or exc.code
+            return f"Gemini HTTP {code} {status}: {msg}"
+    except Exception:
+        pass
+    return f"Gemini HTTP {exc.code}: {detail or exc.reason}"

@@ -29,6 +29,16 @@ class _FakeLLM(LLMClient):
         yield from ()
 
 
+class _ExplodingLLM(LLMClient):
+    def generate(self, *, prompt: str, system: str | None = None, use_google_search: bool = False) -> str:
+        _ = (prompt, system, use_google_search)
+        raise RuntimeError("HTTP 400 Bad Request")
+
+    def stream_generate(self, *, prompt: str, system: str | None = None, use_google_search: bool = False):
+        _ = (prompt, system, use_google_search)
+        raise RuntimeError("HTTP 400 Bad Request")
+
+
 class TestLLMChatSession(unittest.TestCase):
     def test_chat_executes_tool_calls(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -129,3 +139,23 @@ class TestLLMChatSession(unittest.TestCase):
         finally:
             broker.disconnect()
 
+    def test_chat_handles_model_error_without_raising(self) -> None:
+        cfg = TradingConfig(broker="sim", dry_run=False, db_path=None)
+        llm = LLMConfig(enabled=True, provider="gemini", gemini_api_key="x", allowed_symbols_csv="AAPL")
+        broker = SimBroker()
+        broker.connect()
+        broker.set_market_data(InstrumentSpec(kind="STK", symbol="AAPL"), last=100.0)
+        try:
+            session = ChatSession(
+                broker=broker,
+                trading=cfg,
+                llm=llm,
+                client=_ExplodingLLM(),
+                risk=RiskManager(RiskLimits()),
+                stream=False,
+            )
+            session.add_user_message("hi")
+            reply = session.run_turn()
+            self.assertIn("LLM request failed", reply.assistant_message)
+        finally:
+            broker.disconnect()
