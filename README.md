@@ -40,7 +40,7 @@ cp .env.example .env
 
 Safety defaults:
 - `TRADING_REQUIRE_PAPER` is enforced in code (cannot be disabled): the bot refuses to run if the connected session doesn't look like Paper Trading (managed accounts not starting with `DU`).
-- `TRADING_DRY_RUN=true` stages orders only (no orders sent).
+- `TRADING_DRY_RUN=true` stages orders only (no orders sent). Default is `false`.
 - `TRADING_LIVE_ENABLED=false` blocks sending orders to IBKR unless you explicitly enable it.
 - `TRADING_ORDER_TOKEN` + `--confirm-token` is a second gate required to send IBKR orders.
 - `TRADING_DB_PATH` enables a sqlite audit log for decisions and orders.

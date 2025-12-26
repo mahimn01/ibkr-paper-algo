@@ -14,7 +14,10 @@ __pycache__/
 *.sqlite3
 *.sqlite
 
+# Local logs
+logs/
+*.log
+
 # OS/editor
 .idea/
 .vscode/
-

@@ -21,4 +21,3 @@ class TestAutorunEntrypoint(unittest.TestCase):
         finally:
             os.environ.clear()
             os.environ.update(env_backup)
-

@@ -14,19 +14,43 @@ from trading_algo.risk import RiskLimits, RiskManager
 
 
 class _FakeLLM(LLMClient):
-    def __init__(self, outputs: list[str]) -> None:
+    def __init__(self, outputs: list[dict]) -> None:
         self._outputs = list(outputs)
 
     def generate(self, *, prompt: str, system: str | None = None, use_google_search: bool = False) -> str:
         _ = (prompt, system, use_google_search)
-        if not self._outputs:
-            return "{\"assistant_message\":\"\",\"tool_calls\":[]}"
-        return self._outputs.pop(0)
+        return ""
 
     def stream_generate(self, *, prompt: str, system: str | None = None, use_google_search: bool = False):
-        # Not used by these tests.
         _ = (prompt, system, use_google_search)
-        yield from ()
+        yield ""
+
+    def generate_content(
+        self,
+        *,
+        contents: list[dict[str, object]],
+        system: str | None = None,
+        tools: list[dict[str, object]] | None = None,
+        use_google_search: bool = False,
+    ) -> dict[str, object]:
+        _ = (contents, system, tools, use_google_search)
+        if not self._outputs:
+            return {"candidates": [{"content": {"role": "model", "parts": [{"text": ""}]}}]}
+        return self._outputs.pop(0)
+
+    def stream_generate_content(
+        self,
+        *,
+        contents: list[dict[str, object]],
+        system: str | None = None,
+        tools: list[dict[str, object]] | None = None,
+        use_google_search: bool = False,
+    ):
+        _ = (contents, system, tools, use_google_search)
+        if not self._outputs:
+            return
+        # Not used in these tests (stream=False).
+        yield self._outputs.pop(0)
 
 
 class _ExplodingLLM(LLMClient):
@@ -36,6 +60,28 @@ class _ExplodingLLM(LLMClient):
 
     def stream_generate(self, *, prompt: str, system: str | None = None, use_google_search: bool = False):
         _ = (prompt, system, use_google_search)
+        raise RuntimeError("HTTP 400 Bad Request")
+
+    def generate_content(
+        self,
+        *,
+        contents: list[dict[str, object]],
+        system: str | None = None,
+        tools: list[dict[str, object]] | None = None,
+        use_google_search: bool = False,
+    ) -> dict[str, object]:
+        _ = (contents, system, tools, use_google_search)
+        raise RuntimeError("HTTP 400 Bad Request")
+
+    def stream_generate_content(
+        self,
+        *,
+        contents: list[dict[str, object]],
+        system: str | None = None,
+        tools: list[dict[str, object]] | None = None,
+        use_google_search: bool = False,
+    ):
+        _ = (contents, system, tools, use_google_search)
         raise RuntimeError("HTTP 400 Bad Request")
 
 
@@ -48,20 +94,34 @@ class TestLLMChatSession(unittest.TestCase):
 
             fake = _FakeLLM(
                 outputs=[
-                    """
                     {
-                      "assistant_message": "Placing a small test order.",
-                      "tool_calls": [
-                        {"id":"1","name":"place_order","args":{
-                          "order":{
-                            "instrument":{"kind":"STK","symbol":"AAPL","exchange":"SMART","currency":"USD"},
-                            "side":"BUY","qty":1,"type":"MKT","tif":"DAY"
-                          }
-                        }}
-                      ]
-                    }
-                    """,
-                    """{"assistant_message":"Done.","tool_calls":[]}""",
+                        "candidates": [
+                            {
+                                "content": {
+                                    "role": "model",
+                                    "parts": [
+                                        {"text": "Placing a small test order.\n"},
+                                        {
+                                            "functionCall": {
+                                                "name": "place_order",
+                                                "args": {
+                                                    "order": {
+                                                        "instrument": {"kind": "STK", "symbol": "AAPL", "exchange": "SMART", "currency": "USD"},
+                                                        "side": "BUY",
+                                                        "qty": 1,
+                                                        "type": "MKT",
+                                                        "tif": "DAY",
+                                                    }
+                                                },
+                                            },
+                                            "thoughtSignature": "context_engineering_is_the_way_to_go",
+                                        },
+                                    ],
+                                }
+                            }
+                        ]
+                    },
+                    {"candidates": [{"content": {"role": "model", "parts": [{"text": "Done."}]}}]},
                 ]
             )
 
@@ -85,7 +145,8 @@ class TestLLMChatSession(unittest.TestCase):
                     executed.append((call.name, ok))
 
                 reply = session.run_turn(on_tool_executed=_on_tool)
-                self.assertEqual(reply.assistant_message, "Done.")
+                self.assertIn("Placing a small test order.", reply.assistant_message)
+                self.assertIn("Done.", reply.assistant_message)
                 self.assertEqual(len(broker.orders), 1)
                 self.assertEqual(executed, [("place_order", True)])
             finally:
@@ -96,20 +157,34 @@ class TestLLMChatSession(unittest.TestCase):
         llm = LLMConfig(enabled=True, provider="gemini", gemini_api_key="x", allowed_symbols_csv="AAPL")
         fake = _FakeLLM(
             outputs=[
-                """
                 {
-                  "assistant_message": "Attempting disallowed symbol.",
-                  "tool_calls": [
-                    {"name":"place_order","args":{
-                      "order":{
-                        "instrument":{"kind":"STK","symbol":"TSLA","exchange":"SMART","currency":"USD"},
-                        "side":"BUY","qty":1,"type":"MKT","tif":"DAY"
-                      }
-                    }}
-                  ]
-                }
-                """,
-                """{"assistant_message":"Acknowledged.","tool_calls":[]}""",
+                    "candidates": [
+                        {
+                            "content": {
+                                "role": "model",
+                                "parts": [
+                                    {"text": "Attempting disallowed symbol.\n"},
+                                    {
+                                        "functionCall": {
+                                            "name": "place_order",
+                                            "args": {
+                                                "order": {
+                                                    "instrument": {"kind": "STK", "symbol": "TSLA", "exchange": "SMART", "currency": "USD"},
+                                                    "side": "BUY",
+                                                    "qty": 1,
+                                                    "type": "MKT",
+                                                    "tif": "DAY",
+                                                }
+                                            },
+                                        },
+                                        "thoughtSignature": "context_engineering_is_the_way_to_go",
+                                    },
+                                ],
+                            }
+                        }
+                    ]
+                },
+                {"candidates": [{"content": {"role": "model", "parts": [{"text": "Acknowledged."}]}}]},
             ]
         )
         broker = SimBroker()
@@ -133,7 +208,7 @@ class TestLLMChatSession(unittest.TestCase):
                 executed.append((call.name, ok))
 
             reply = session.run_turn(on_tool_executed=_on_tool)
-            self.assertEqual(reply.assistant_message, "Acknowledged.")
+            self.assertIn("Attempting disallowed symbol.", reply.assistant_message)
             self.assertEqual(len(broker.orders), 0)
             self.assertEqual(executed, [("place_order", False)])
         finally:

@@ -71,6 +71,21 @@ def _load_ib_insync_factories() -> _Factories:
     )
 
 
+def _ensure_thread_event_loop() -> None:
+    """
+    Ensure an asyncio event loop exists for the current thread.
+
+    `ib_insync` (via `eventkit`) assumes a loop exists; our chat TUI executes broker calls in a worker
+    thread, so we must create one there as well.
+    """
+    import asyncio
+
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+
+
 @dataclass
 class IBKRBroker:
     """
@@ -95,6 +110,7 @@ class IBKRBroker:
         return self._factories
 
     def connect(self) -> None:
+        _ensure_thread_event_loop()
         factories = self._ensure_factories()
         self._ib = (self.ib_factory or factories.IB)()
         log.info("Connecting to IBKR %s:%s clientId=%s", self.config.host, self.config.port, self.config.client_id)
@@ -142,6 +158,7 @@ class IBKRBroker:
         raise ValueError(f"Unsupported instrument kind: {spec.kind}")
 
     def _qualify(self, contract: Any) -> Any:
+        _ensure_thread_event_loop()
         if self._ib is None:
             raise RuntimeError("Broker is not connected")
         qualified = self._ib.qualifyContracts(contract)
@@ -150,6 +167,7 @@ class IBKRBroker:
         return qualified[0]
 
     def place_order(self, req: OrderRequest) -> OrderResult:
+        _ensure_thread_event_loop()
         if self._ib is None:
             raise RuntimeError("Broker is not connected")
 
@@ -178,6 +196,7 @@ class IBKRBroker:
         return OrderResult(order_id=order_id, status=status)
 
     def modify_order(self, order_id: str, new_req: OrderRequest) -> OrderResult:
+        _ensure_thread_event_loop()
         if self._ib is None:
             raise RuntimeError("Broker is not connected")
         new_req = validate_order_request(new_req)
@@ -203,6 +222,7 @@ class IBKRBroker:
         return OrderResult(order_id=str(order_id), status=str(status))
 
     def cancel_order(self, order_id: str) -> None:
+        _ensure_thread_event_loop()
         if self._ib is None:
             raise RuntimeError("Broker is not connected")
         trade = self._trades.get(str(order_id)) or _find_trade(self._ib, str(order_id))
@@ -214,6 +234,7 @@ class IBKRBroker:
     def get_order_status(self, order_id: str):
         from trading_algo.broker.base import OrderStatus
 
+        _ensure_thread_event_loop()
         if self._ib is None:
             raise RuntimeError("Broker is not connected")
         trade = self._trades.get(str(order_id)) or _find_trade(self._ib, str(order_id))
@@ -235,6 +256,7 @@ class IBKRBroker:
     def list_open_order_statuses(self) -> list["OrderStatus"]:
         from trading_algo.broker.base import OrderStatus
 
+        _ensure_thread_event_loop()
         if self._ib is None:
             raise RuntimeError("Broker is not connected")
         out: list[OrderStatus] = []
@@ -268,6 +290,7 @@ class IBKRBroker:
         return out
 
     def place_bracket_order(self, req: BracketOrderRequest) -> BracketOrderResult:
+        _ensure_thread_event_loop()
         if self._ib is None:
             raise RuntimeError("Broker is not connected")
         req_inst = validate_instrument(req.instrument)
@@ -336,6 +359,7 @@ class IBKRBroker:
         - IBKR market data may be delayed or unavailable without subscriptions.
         - Fields may be None if not available.
         """
+        _ensure_thread_event_loop()
         if self._ib is None:
             raise RuntimeError("Broker is not connected")
 
@@ -408,6 +432,7 @@ class IBKRBroker:
         what_to_show: str = "TRADES",
         use_rth: bool = False,
     ) -> list[Bar]:
+        _ensure_thread_event_loop()
         if self._ib is None:
             raise RuntimeError("Broker is not connected")
         instrument = validate_instrument(instrument)
@@ -447,6 +472,7 @@ class IBKRBroker:
         return out
 
     def get_positions(self) -> list[Position]:
+        _ensure_thread_event_loop()
         if self._ib is None:
             raise RuntimeError("Broker is not connected")
         positions = []
@@ -472,6 +498,7 @@ class IBKRBroker:
         return positions
 
     def get_account_snapshot(self) -> AccountSnapshot:
+        _ensure_thread_event_loop()
         if self._ib is None:
             raise RuntimeError("Broker is not connected")
 

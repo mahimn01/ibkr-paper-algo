@@ -35,8 +35,9 @@ class TradingConfig:
     broker: str = "ibkr"  # "ibkr" | "sim"
     live_enabled: bool = False
     require_paper: bool = True  # forced-on safety rail
-    dry_run: bool = True
+    dry_run: bool = False
     order_token: str | None = None
+    confirm_token_required: bool = False
     db_path: str | None = None
     poll_seconds: int = 5
     ibkr: IBKRConfig = IBKRConfig()
@@ -53,8 +54,9 @@ class TradingConfig:
             live_enabled=_get_env_bool("TRADING_LIVE_ENABLED", False),
             # Intentionally forced on: paper-only guard should not be disabled by env.
             require_paper=True,
-            dry_run=_get_env_bool("TRADING_DRY_RUN", True),
+            dry_run=_get_env_bool("TRADING_DRY_RUN", False),
             order_token=(_get_env("TRADING_ORDER_TOKEN", "").strip() or None),
+            confirm_token_required=_get_env_bool("TRADING_CONFIRM_TOKEN_REQUIRED", False),
             db_path=(_get_env("TRADING_DB_PATH", "").strip() or None),
             poll_seconds=_get_env_int("TRADING_POLL_SECONDS", 5),
             ibkr=ibkr,

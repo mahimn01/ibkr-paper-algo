@@ -113,7 +113,10 @@ def _load_dotenv_if_present() -> None:
             if not line or line.startswith("#") or "=" not in line:
                 continue
             k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+            k = k.strip()
+            v = v.strip().strip('"').strip("'")
+            if os.getenv(k) is None or os.getenv(k) == "":
+                os.environ[k] = v
 
 
 def build_parser() -> argparse.ArgumentParser:

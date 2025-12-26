@@ -16,7 +16,7 @@ class ToolError(RuntimeError):
 
 def list_tools() -> list[dict[str, Any]]:
     """
-    For display only (Gemini function calling is not used; we use a custom JSON protocol).
+    For display and Gemini function calling declarations.
     """
     return [
         {"name": "get_snapshot", "args": {"kind": "STK|FUT|FX", "symbol": "str", "exchange": "str?", "currency": "str?", "expiry": "str?"}},
@@ -28,6 +28,141 @@ def list_tools() -> list[dict[str, Any]]:
         {"name": "cancel_order", "args": {"order_id": "str"}},
         {"name": "oms_reconcile", "args": {}},
         {"name": "oms_track", "args": {"poll_seconds": "float?", "timeout_seconds": "float?"}},
+    ]
+
+
+def gemini_function_declarations() -> list[dict[str, Any]]:
+    """
+    Gemini v1beta function calling declarations.
+
+    NOTE: This is a minimal OpenAPI-subset schema intended to be robust; all inputs are validated
+    again server-side (instrument + order validation) before hitting the broker.
+    """
+    return [
+        {
+            "name": "get_snapshot",
+            "description": "Fetch a market data snapshot (best-effort; may be delayed).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": ["STK", "FUT", "FX"], "description": "Instrument kind."},
+                    "symbol": {"type": "string", "description": "Ticker/symbol, e.g. AAPL or EURUSD."},
+                    "exchange": {"type": "string", "description": "Optional exchange, e.g. SMART."},
+                    "currency": {"type": "string", "description": "Optional currency, e.g. USD."},
+                    "expiry": {"type": "string", "description": "Futures expiry YYYYMM or YYYYMMDD."},
+                },
+                "required": ["symbol"],
+            },
+        },
+        {
+            "name": "get_positions",
+            "description": "List current account positions.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "get_account",
+            "description": "Fetch current account values (e.g. NetLiquidation).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "list_open_orders",
+            "description": "List currently open orders/trades.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "place_order",
+            "description": "Place a new order (paper-only enforcement happens at broker connect).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "order": {
+                        "type": "object",
+                        "properties": {
+                            "instrument": {
+                                "type": "object",
+                                "properties": {
+                                    "kind": {"type": "string", "enum": ["STK", "FUT", "FX"]},
+                                    "symbol": {"type": "string"},
+                                    "exchange": {"type": "string"},
+                                    "currency": {"type": "string"},
+                                    "expiry": {"type": "string"},
+                                },
+                                "required": ["kind", "symbol"],
+                            },
+                            "side": {"type": "string", "enum": ["BUY", "SELL"]},
+                            "qty": {"type": "number"},
+                            "type": {"type": "string", "enum": ["MKT", "LMT", "STP", "STPLMT"]},
+                            "limit_price": {"type": "number"},
+                            "stop_price": {"type": "number"},
+                            "tif": {"type": "string", "description": "Time-in-force (e.g. DAY)."},
+                            "outside_rth": {"type": "boolean"},
+                        },
+                        "required": ["instrument", "side", "qty", "type"],
+                    }
+                },
+                "required": ["order"],
+            },
+        },
+        {
+            "name": "modify_order",
+            "description": "Modify/replace an existing order by order_id.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "order_id": {"type": "string"},
+                    "order": {
+                        "type": "object",
+                        "properties": {
+                            "instrument": {
+                                "type": "object",
+                                "properties": {
+                                    "kind": {"type": "string", "enum": ["STK", "FUT", "FX"]},
+                                    "symbol": {"type": "string"},
+                                    "exchange": {"type": "string"},
+                                    "currency": {"type": "string"},
+                                    "expiry": {"type": "string"},
+                                },
+                                "required": ["kind", "symbol"],
+                            },
+                            "side": {"type": "string", "enum": ["BUY", "SELL"]},
+                            "qty": {"type": "number"},
+                            "type": {"type": "string", "enum": ["MKT", "LMT", "STP", "STPLMT"]},
+                            "limit_price": {"type": "number"},
+                            "stop_price": {"type": "number"},
+                            "tif": {"type": "string"},
+                            "outside_rth": {"type": "boolean"},
+                        },
+                        "required": ["instrument", "side", "qty", "type"],
+                    },
+                },
+                "required": ["order_id", "order"],
+            },
+        },
+        {
+            "name": "cancel_order",
+            "description": "Cancel an existing order by order_id.",
+            "parameters": {
+                "type": "object",
+                "properties": {"order_id": {"type": "string"}},
+                "required": ["order_id"],
+            },
+        },
+        {
+            "name": "oms_reconcile",
+            "description": "Reconcile OMS DB state with broker open orders.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "oms_track",
+            "description": "Poll open orders and record lifecycle transitions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "poll_seconds": {"type": "number"},
+                    "timeout_seconds": {"type": "number"},
+                },
+            },
+        },
     ]
 
 
@@ -142,4 +277,3 @@ def _enforce_allowlist(inst: InstrumentSpec, allowed_kinds: set[str], allowed_sy
         raise ToolError(f"Instrument kind not allowed: {inst.kind}")
     if allowed_symbols and inst.symbol.upper() not in {s.upper() for s in allowed_symbols}:
         raise ToolError(f"Symbol not allowed: {inst.symbol}")
-

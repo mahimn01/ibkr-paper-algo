@@ -11,6 +11,22 @@ from urllib.error import HTTPError
 class LLMClient(Protocol):
     def generate(self, *, prompt: str, system: str | None = None, use_google_search: bool = False) -> str: ...
     def stream_generate(self, *, prompt: str, system: str | None = None, use_google_search: bool = False): ...
+    def generate_content(
+        self,
+        *,
+        contents: list[dict[str, object]],
+        system: str | None = None,
+        tools: list[dict[str, object]] | None = None,
+        use_google_search: bool = False,
+    ) -> dict[str, object]: ...
+    def stream_generate_content(
+        self,
+        *,
+        contents: list[dict[str, object]],
+        system: str | None = None,
+        tools: list[dict[str, object]] | None = None,
+        use_google_search: bool = False,
+    ): ...
 
 
 @dataclass(frozen=True)
@@ -29,18 +45,15 @@ class GeminiClient(LLMClient):
     timeout_s: float = 30.0
 
     def generate(self, *, prompt: str, system: str | None = None, use_google_search: bool = False) -> str:
-        if not self.api_key:
-            raise RuntimeError("GEMINI_API_KEY is required")
+        _validate_api_key(self.api_key)
         if not self.model:
             raise RuntimeError("GEMINI_MODEL is required")
 
-        url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{urllib.parse.quote(self.model)}:generateContent?key={urllib.parse.quote(self.api_key)}"
-        )
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{urllib.parse.quote(self.model)}:generateContent"
         payload: dict[str, object] = {
             "contents": [{"role": "user", "parts": [{"text": str(prompt)}]}],
-            "generationConfig": {"temperature": 0.2},
+            # Gemini 3 docs recommend temperature default 1.0.
+            "generationConfig": {"temperature": 1.0, "thinkingConfig": {"thinkingLevel": "high"}},
         }
         if system:
             payload["systemInstruction"] = {"parts": [{"text": str(system)}]}
@@ -50,7 +63,7 @@ class GeminiClient(LLMClient):
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key},
             method="POST",
         )
         try:
@@ -72,18 +85,14 @@ class GeminiClient(LLMClient):
         Uses `:streamGenerateContent` endpoint and yields text chunks as they arrive.
         The caller is responsible for buffering if it needs the full response.
         """
-        if not self.api_key:
-            raise RuntimeError("GEMINI_API_KEY is required")
+        _validate_api_key(self.api_key)
         if not self.model:
             raise RuntimeError("GEMINI_MODEL is required")
 
-        url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{urllib.parse.quote(self.model)}:streamGenerateContent?alt=sse&key={urllib.parse.quote(self.api_key)}"
-        )
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{urllib.parse.quote(self.model)}:streamGenerateContent?alt=sse"
         payload: dict[str, object] = {
             "contents": [{"role": "user", "parts": [{"text": str(prompt)}]}],
-            "generationConfig": {"temperature": 0.2},
+            "generationConfig": {"temperature": 1.0, "thinkingConfig": {"thinkingLevel": "high"}},
         }
         if system:
             payload["systemInstruction"] = {"parts": [{"text": str(system)}]}
@@ -93,7 +102,11 @@ class GeminiClient(LLMClient):
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "Accept": "text/event-stream"},
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream",
+                "x-goog-api-key": self.api_key,
+            },
             method="POST",
         )
         try:
@@ -103,6 +116,102 @@ class GeminiClient(LLMClient):
                     chunk = _extract_text(obj)
                     if chunk:
                         yield chunk
+        except HTTPError as exc:
+            raise RuntimeError(_format_http_error(exc)) from exc
+
+    def generate_content(
+        self,
+        *,
+        contents: list[dict[str, object]],
+        system: str | None = None,
+        tools: list[dict[str, object]] | None = None,
+        use_google_search: bool = False,
+    ) -> dict[str, object]:
+        """
+        Low-level content generation with optional tool/function calling.
+        Returns the parsed JSON response.
+        """
+        _validate_api_key(self.api_key)
+        if not self.model:
+            raise RuntimeError("GEMINI_MODEL is required")
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{urllib.parse.quote(self.model)}:generateContent"
+        payload: dict[str, object] = {
+            "contents": list(contents),
+            "generationConfig": {"temperature": 1.0, "thinkingConfig": {"thinkingLevel": "high"}},
+        }
+        if system:
+            payload["systemInstruction"] = {"parts": [{"text": str(system)}]}
+
+        tools_list: list[dict[str, object]] = []
+        if tools:
+            tools_list.extend(list(tools))
+        if use_google_search:
+            tools_list.append({"googleSearch": {}})
+        if tools_list:
+            payload["tools"] = tools_list
+
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=float(self.timeout_s)) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except HTTPError as exc:
+            raise RuntimeError(_format_http_error(exc)) from exc
+        return data
+
+    def stream_generate_content(
+        self,
+        *,
+        contents: list[dict[str, object]],
+        system: str | None = None,
+        tools: list[dict[str, object]] | None = None,
+        use_google_search: bool = False,
+    ):
+        """
+        Streaming content generation (SSE). Yields parsed JSON event objects.
+
+        NOTE: The caller should consume the entire stream; function call metadata and/or
+        thought signatures may arrive in chunks with empty text.
+        """
+        _validate_api_key(self.api_key)
+        if not self.model:
+            raise RuntimeError("GEMINI_MODEL is required")
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{urllib.parse.quote(self.model)}:streamGenerateContent?alt=sse"
+        payload: dict[str, object] = {
+            "contents": list(contents),
+            "generationConfig": {"temperature": 1.0, "thinkingConfig": {"thinkingLevel": "high"}},
+        }
+        if system:
+            payload["systemInstruction"] = {"parts": [{"text": str(system)}]}
+
+        tools_list: list[dict[str, object]] = []
+        if tools:
+            tools_list.extend(list(tools))
+        if use_google_search:
+            tools_list.append({"googleSearch": {}})
+        if tools_list:
+            payload["tools"] = tools_list
+
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream",
+                "x-goog-api-key": self.api_key,
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=float(self.timeout_s)) as resp:
+                for obj in _iter_sse_json_objects(resp):
+                    yield obj
         except HTTPError as exc:
             raise RuntimeError(_format_http_error(exc)) from exc
 
@@ -176,3 +285,23 @@ def _format_http_error(exc: HTTPError) -> str:
     except Exception:
         pass
     return f"Gemini HTTP {exc.code}: {detail or exc.reason}"
+
+
+def _validate_api_key(api_key: str) -> None:
+    """
+    Fail fast with actionable errors so we don't end up with opaque HTTP 400s.
+    """
+    key = str(api_key or "")
+    if not key:
+        raise RuntimeError("GEMINI_API_KEY is required")
+    # Catch the most common copy/paste issues.
+    for bad in [" ", "\t", "\n", "\r"]:
+        if bad in key:
+            raise RuntimeError("GEMINI_API_KEY contains whitespace; remove spaces/newlines and try again.")
+    if "," in key:
+        raise RuntimeError("GEMINI_API_KEY contains ',' (did you paste with a trailing comma?)")
+    if key.startswith(("\"", "'")) or key.endswith(("\"", "'")):
+        raise RuntimeError("GEMINI_API_KEY appears to include quotes; remove them in .env.")
+    # Basic sanity: Google API keys generally start with 'AIza'.
+    if not key.startswith("AIza"):
+        raise RuntimeError("GEMINI_API_KEY format looks wrong (expected to start with 'AIza...').")

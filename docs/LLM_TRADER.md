@@ -19,7 +19,7 @@ This project includes an optional LLM-driven “trader” loop that can propose 
 - `LLM_ENABLED=true`
 - `LLM_PROVIDER=gemini`
 - `GEMINI_API_KEY=...`
-- `GEMINI_MODEL=gemini-3` (required; `gemini-2.5-*` is refused)
+- `GEMINI_MODEL=gemini-3-pro-preview` (recommended) or `gemini-3-flash-preview`. Non-Gemini-3 models are refused. If you set `gemini-3` or `gemini-3-pro`, it will be normalized to `gemini-3-pro-preview`.
 - `LLM_USE_GOOGLE_SEARCH=false|true` (adds `tools:[{googleSearch:{}}]` to Gemini requests)
 - No additional Google Search key is required; grounding uses the same `GEMINI_API_KEY`.
 - `LLM_ALLOWED_KINDS=STK`

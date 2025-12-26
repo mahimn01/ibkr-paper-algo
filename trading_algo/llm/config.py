@@ -29,11 +29,13 @@ class LLMConfig:
     provider: str = "off"  # off|gemini
 
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-3"
+    # Gemini 3 model IDs are currently preview IDs.
+    gemini_model: str = "gemini-3-pro-preview"
     gemini_use_google_search: bool = False
 
     allowed_kinds_csv: str = "STK"
-    allowed_symbols_csv: str = ""  # required when enabled, for safety
+    # Empty means "allow any symbol" (still paper-only at the broker layer).
+    allowed_symbols_csv: str = ""
     max_orders_per_tick: int = 3
     max_qty: float = 10.0
 
@@ -58,3 +60,18 @@ class LLMConfig:
     def allowed_symbols(self) -> set[str]:
         return {s.strip().upper() for s in self.allowed_symbols_csv.split(",") if s.strip()}
 
+    def normalized_gemini_model(self) -> str:
+        """
+        Normalize common (but invalid) model names to supported Gemini 3 identifiers.
+
+        Users commonly guess suffixes like "-pro" which may not exist on the v1beta endpoint.
+        """
+        m = str(self.gemini_model or "").strip()
+        aliases = {
+            # Common shorthand / guesses -> preview IDs
+            "gemini-3": "gemini-3-pro-preview",
+            "gemini-3-pro": "gemini-3-pro-preview",
+            "gemini-3-flash": "gemini-3-flash-preview",
+        }
+        m = aliases.get(m, m)
+        return m or "gemini-3-pro-preview"

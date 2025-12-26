@@ -31,7 +31,14 @@ class TestOMS(unittest.TestCase):
         broker = SimBroker()
         broker.connect()
         try:
-            cfg = TradingConfig(broker="ibkr", live_enabled=True, dry_run=False, order_token="T", ibkr=IBKRConfig())
+            cfg = TradingConfig(
+                broker="ibkr",
+                live_enabled=True,
+                dry_run=False,
+                order_token="T",
+                confirm_token_required=True,
+                ibkr=IBKRConfig(),
+            )
             oms = OrderManager(broker, cfg, confirm_token="WRONG")
             self.addCleanup(oms.close)
             req = OrderRequest(instrument=InstrumentSpec(kind="STK", symbol="AAPL"), side="BUY", quantity=1, order_type="MKT")

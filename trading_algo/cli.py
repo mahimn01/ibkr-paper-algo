@@ -35,7 +35,9 @@ def _load_dotenv_if_present() -> None:
             k, v = line.split("=", 1)
             k = k.strip()
             v = v.strip().strip('"').strip("'")
-            os.environ.setdefault(k, v)
+            # Set only if missing/empty so shell overrides still work, but blanks get filled.
+            if os.getenv(k) is None or os.getenv(k) == "":
+                os.environ[k] = v
 
 
 def _make_broker(kind: Literal["ibkr", "sim"], cfg: TradingConfig):
@@ -67,6 +69,7 @@ def _apply_cli_overrides(cfg: TradingConfig, args: argparse.Namespace) -> Tradin
         require_paper=True,
         dry_run=dry_run,
         order_token=cfg.order_token,
+        confirm_token_required=cfg.confirm_token_required,
         db_path=cfg.db_path,
         poll_seconds=cfg.poll_seconds,
         ibkr=ibkr,
@@ -81,10 +84,11 @@ def _assert_ibkr_order_authorized(cfg: TradingConfig, confirm_token: str | None)
         return
     if not cfg.live_enabled:
         raise SystemExit("Refusing to place IBKR orders with TRADING_LIVE_ENABLED=false (set it true explicitly).")
-    if not cfg.order_token:
-        raise SystemExit("Refusing to place IBKR orders without TRADING_ORDER_TOKEN set (second confirmation gate).")
-    if confirm_token != cfg.order_token:
-        raise SystemExit("Refusing to place IBKR orders: --confirm-token does not match TRADING_ORDER_TOKEN.")
+    if cfg.confirm_token_required:
+        if not cfg.order_token:
+            raise SystemExit("Refusing to place IBKR orders without TRADING_ORDER_TOKEN set (second confirmation gate).")
+        if confirm_token != cfg.order_token:
+            raise SystemExit("Refusing to place IBKR orders: --confirm-token does not match TRADING_ORDER_TOKEN.")
 
 
 def _cmd_place_order(args: argparse.Namespace) -> int:
@@ -556,7 +560,10 @@ def _cmd_llm_run(args: argparse.Namespace) -> int:
     if not llm_cfg.gemini_api_key:
         raise SystemExit("GEMINI_API_KEY must be set for llm-run")
     if not str(llm_cfg.gemini_model).startswith("gemini-3"):
-        raise SystemExit(f"Refusing to run with GEMINI_MODEL={llm_cfg.gemini_model!r}; set GEMINI_MODEL=gemini-3")
+        raise SystemExit(
+            f"Refusing to run with GEMINI_MODEL={llm_cfg.gemini_model!r}; set GEMINI_MODEL to a Gemini 3 model id "
+            "(e.g. gemini-3-pro-preview or gemini-3-flash-preview)."
+        )
     if not llm_cfg.allowed_symbols():
         raise SystemExit("LLM_ALLOWED_SYMBOLS must be set (comma-separated)")
 
@@ -569,7 +576,7 @@ def _cmd_llm_run(args: argparse.Namespace) -> int:
         broker=broker,
         trading=cfg,
         llm=llm_cfg,
-        client=GeminiClient(api_key=llm_cfg.gemini_api_key, model=llm_cfg.gemini_model),
+        client=GeminiClient(api_key=llm_cfg.gemini_api_key, model=llm_cfg.normalized_gemini_model()),
         risk=RiskManager(RiskLimits()),
         confirm_token=args.confirm_token,
         sleep_seconds=float(args.sleep_seconds),
@@ -602,6 +609,10 @@ def _cmd_chat(args: argparse.Namespace) -> int:
         argv += ["--show-raw"]
     if bool(args.no_color):
         argv += ["--no-color"]
+    if bool(getattr(args, "quiet_ibkr_logs", False)):
+        argv += ["--quiet-ibkr-logs"]
+    if getattr(args, "ui", None):
+        argv += ["--ui", str(args.ui)]
     return int(chat_main(argv))
 
 
@@ -611,7 +622,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ibkr-host", default=None, help="Override IBKR host (default from env/.env)")
     p.add_argument("--ibkr-port", default=None, help="Override IBKR port (default from env/.env)")
     p.add_argument("--ibkr-client-id", default=None, help="Override IBKR clientId (default from env/.env)")
-    p.add_argument("--confirm-token", default=None, help="Must match TRADING_ORDER_TOKEN to allow sending orders")
+    p.add_argument(
+        "--confirm-token",
+        default=None,
+        help="Must match TRADING_ORDER_TOKEN if TRADING_CONFIRM_TOKEN_REQUIRED=true",
+    )
     p.add_argument("--dry-run", action="store_true", help="Stage orders only (no sends), overrides TRADING_DRY_RUN")
     p.add_argument("--no-dry-run", action="store_true", help="Allow sending orders, overrides TRADING_DRY_RUN")
 
@@ -781,6 +796,8 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument("--no-stream", action="store_true")
     chat.add_argument("--show-raw", action="store_true")
     chat.add_argument("--no-color", action="store_true")
+    chat.add_argument("--quiet-ibkr-logs", action="store_true", dest="quiet_ibkr_logs")
+    chat.add_argument("--ui", choices=["auto", "plain", "rich", "tui"], default="auto")
     chat.set_defaults(func=_cmd_chat)
 
     return p
@@ -794,7 +811,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     log_level = getattr(logging, str(args.log_level).upper(), logging.INFO)
-    configure_logging(level=log_level)
+
+    # prompt_toolkit runs in full-screen mode for `chat --ui tui`; any stdout/stderr writes from
+    # logging will corrupt the terminal UI. Route logs to a file instead.
+    tui_mode = bool(getattr(args, "ui", None) == "tui" and getattr(args, "func", None) == _cmd_chat)
+    if tui_mode:
+        log_path = os.getenv("TUI_LOG_PATH", "logs/tui.log")
+        configure_logging(level=log_level, log_file=log_path, console=False)
+    else:
+        configure_logging(level=log_level)
     logging.getLogger(__name__).debug("Loaded config: %s", cfg)
 
     return int(args.func(args))

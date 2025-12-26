@@ -148,10 +148,11 @@ class OrderManager:
         if self._cfg.broker == "ibkr":
             if not self._cfg.live_enabled:
                 raise RuntimeError("IBKR sending blocked: TRADING_LIVE_ENABLED=false")
-            if not self._cfg.order_token:
-                raise RuntimeError("IBKR sending blocked: TRADING_ORDER_TOKEN missing")
-            if self._confirm_token != self._cfg.order_token:
-                raise RuntimeError("IBKR sending blocked: confirm token mismatch")
+            if self._cfg.confirm_token_required:
+                if not self._cfg.order_token:
+                    raise RuntimeError("IBKR sending blocked: TRADING_ORDER_TOKEN missing")
+                if self._confirm_token != self._cfg.order_token:
+                    raise RuntimeError("IBKR sending blocked: confirm token mismatch")
 
     def _log_order(self, req: OrderRequest, res: OrderResult) -> None:
         if self._store is None or self._run_id is None:
