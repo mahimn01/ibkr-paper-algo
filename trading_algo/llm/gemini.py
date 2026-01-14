@@ -5,7 +5,17 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Protocol
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
+
+
+def _format_connect_error(exc: Exception) -> str:
+    msg = str(exc)
+    if "nodename nor servname provided" in msg or "Name or service not known" in msg:
+        return (
+            "Network/DNS error: unable to resolve 'generativelanguage.googleapis.com'. "
+            "Check your internet connection and DNS/VPN/firewall settings, then retry."
+        )
+    return msg
 
 
 class LLMClient(Protocol):
@@ -18,6 +28,12 @@ class LLMClient(Protocol):
         system: str | None = None,
         tools: list[dict[str, object]] | None = None,
         use_google_search: bool = False,
+        use_url_context: bool = False,
+        use_code_execution: bool = False,
+        include_thoughts: bool = False,
+        response_mime_type: str | None = None,
+        response_json_schema: dict[str, object] | None = None,
+        cached_content: str | None = None,
     ) -> dict[str, object]: ...
     def stream_generate_content(
         self,
@@ -26,7 +42,24 @@ class LLMClient(Protocol):
         system: str | None = None,
         tools: list[dict[str, object]] | None = None,
         use_google_search: bool = False,
+        use_url_context: bool = False,
+        use_code_execution: bool = False,
+        include_thoughts: bool = False,
+        response_mime_type: str | None = None,
+        response_json_schema: dict[str, object] | None = None,
+        cached_content: str | None = None,
     ): ...
+    def count_tokens(
+        self,
+        *,
+        contents: list[dict[str, object]],
+        system: str | None = None,
+        tools: list[dict[str, object]] | None = None,
+        use_google_search: bool = False,
+        use_url_context: bool = False,
+        use_code_execution: bool = False,
+        cached_content: str | None = None,
+    ) -> int: ...
 
 
 @dataclass(frozen=True)
@@ -37,7 +70,7 @@ class GeminiClient(LLMClient):
     Docs endpoint pattern (v1beta):
       https://generativelanguage.googleapis.com/v1beta/models/<model>:generateContent?key=API_KEY
 
-    If `use_google_search=True`, adds tools=[{googleSearch:{}}] for grounding.
+    If `use_google_search=True`, adds tools=[{google_search:{}}] for grounding.
     """
 
     api_key: str
@@ -58,7 +91,7 @@ class GeminiClient(LLMClient):
         if system:
             payload["systemInstruction"] = {"parts": [{"text": str(system)}]}
         if use_google_search:
-            payload["tools"] = [{"googleSearch": {}}]
+            payload["tools"] = [{"google_search": {}}]
 
         req = urllib.request.Request(
             url,
@@ -69,6 +102,8 @@ class GeminiClient(LLMClient):
         try:
             with urllib.request.urlopen(req, timeout=float(self.timeout_s)) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
+        except URLError as exc:
+            raise RuntimeError(_format_connect_error(exc)) from exc
         except HTTPError as exc:
             raise RuntimeError(_format_http_error(exc)) from exc
         try:
@@ -97,7 +132,7 @@ class GeminiClient(LLMClient):
         if system:
             payload["systemInstruction"] = {"parts": [{"text": str(system)}]}
         if use_google_search:
-            payload["tools"] = [{"googleSearch": {}}]
+            payload["tools"] = [{"google_search": {}}]
 
         req = urllib.request.Request(
             url,
@@ -116,6 +151,8 @@ class GeminiClient(LLMClient):
                     chunk = _extract_text(obj)
                     if chunk:
                         yield chunk
+        except URLError as exc:
+            raise RuntimeError(_format_connect_error(exc)) from exc
         except HTTPError as exc:
             raise RuntimeError(_format_http_error(exc)) from exc
 
@@ -126,6 +163,12 @@ class GeminiClient(LLMClient):
         system: str | None = None,
         tools: list[dict[str, object]] | None = None,
         use_google_search: bool = False,
+        use_url_context: bool = False,
+        use_code_execution: bool = False,
+        include_thoughts: bool = False,
+        response_mime_type: str | None = None,
+        response_json_schema: dict[str, object] | None = None,
+        cached_content: str | None = None,
     ) -> dict[str, object]:
         """
         Low-level content generation with optional tool/function calling.
@@ -136,10 +179,17 @@ class GeminiClient(LLMClient):
             raise RuntimeError("GEMINI_MODEL is required")
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{urllib.parse.quote(self.model)}:generateContent"
+        thinking_cfg: dict[str, object] = {"thinkingLevel": "high"}
+        if include_thoughts:
+            thinking_cfg["includeThoughts"] = True
         payload: dict[str, object] = {
             "contents": list(contents),
-            "generationConfig": {"temperature": 1.0, "thinkingConfig": {"thinkingLevel": "high"}},
+            "generationConfig": {"temperature": 1.0, "thinkingConfig": thinking_cfg},
         }
+        if response_mime_type:
+            payload["generationConfig"]["responseMimeType"] = str(response_mime_type)
+        if response_json_schema:
+            payload["generationConfig"]["responseJsonSchema"] = dict(response_json_schema)
         if system:
             payload["systemInstruction"] = {"parts": [{"text": str(system)}]}
 
@@ -147,9 +197,15 @@ class GeminiClient(LLMClient):
         if tools:
             tools_list.extend(list(tools))
         if use_google_search:
-            tools_list.append({"googleSearch": {}})
+            tools_list.append({"google_search": {}})
+        if use_url_context:
+            tools_list.append({"url_context": {}})
+        if use_code_execution:
+            tools_list.append({"code_execution": {}})
         if tools_list:
             payload["tools"] = tools_list
+        if cached_content:
+            payload["cachedContent"] = str(cached_content)
 
         req = urllib.request.Request(
             url,
@@ -160,6 +216,8 @@ class GeminiClient(LLMClient):
         try:
             with urllib.request.urlopen(req, timeout=float(self.timeout_s)) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
+        except URLError as exc:
+            raise RuntimeError(_format_connect_error(exc)) from exc
         except HTTPError as exc:
             raise RuntimeError(_format_http_error(exc)) from exc
         return data
@@ -171,6 +229,12 @@ class GeminiClient(LLMClient):
         system: str | None = None,
         tools: list[dict[str, object]] | None = None,
         use_google_search: bool = False,
+        use_url_context: bool = False,
+        use_code_execution: bool = False,
+        include_thoughts: bool = False,
+        response_mime_type: str | None = None,
+        response_json_schema: dict[str, object] | None = None,
+        cached_content: str | None = None,
     ):
         """
         Streaming content generation (SSE). Yields parsed JSON event objects.
@@ -183,10 +247,17 @@ class GeminiClient(LLMClient):
             raise RuntimeError("GEMINI_MODEL is required")
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{urllib.parse.quote(self.model)}:streamGenerateContent?alt=sse"
+        thinking_cfg: dict[str, object] = {"thinkingLevel": "high"}
+        if include_thoughts:
+            thinking_cfg["includeThoughts"] = True
         payload: dict[str, object] = {
             "contents": list(contents),
-            "generationConfig": {"temperature": 1.0, "thinkingConfig": {"thinkingLevel": "high"}},
+            "generationConfig": {"temperature": 1.0, "thinkingConfig": thinking_cfg},
         }
+        if response_mime_type:
+            payload["generationConfig"]["responseMimeType"] = str(response_mime_type)
+        if response_json_schema:
+            payload["generationConfig"]["responseJsonSchema"] = dict(response_json_schema)
         if system:
             payload["systemInstruction"] = {"parts": [{"text": str(system)}]}
 
@@ -194,9 +265,15 @@ class GeminiClient(LLMClient):
         if tools:
             tools_list.extend(list(tools))
         if use_google_search:
-            tools_list.append({"googleSearch": {}})
+            tools_list.append({"google_search": {}})
+        if use_url_context:
+            tools_list.append({"url_context": {}})
+        if use_code_execution:
+            tools_list.append({"code_execution": {}})
         if tools_list:
             payload["tools"] = tools_list
+        if cached_content:
+            payload["cachedContent"] = str(cached_content)
 
         req = urllib.request.Request(
             url,
@@ -212,6 +289,141 @@ class GeminiClient(LLMClient):
             with urllib.request.urlopen(req, timeout=float(self.timeout_s)) as resp:
                 for obj in _iter_sse_json_objects(resp):
                     yield obj
+        except URLError as exc:
+            raise RuntimeError(_format_connect_error(exc)) from exc
+        except HTTPError as exc:
+            raise RuntimeError(_format_http_error(exc)) from exc
+
+    def count_tokens(
+        self,
+        *,
+        contents: list[dict[str, object]],
+        system: str | None = None,
+        tools: list[dict[str, object]] | None = None,
+        use_google_search: bool = False,
+        use_url_context: bool = False,
+        use_code_execution: bool = False,
+        cached_content: str | None = None,
+    ) -> int:
+        """
+        Token counting via the `:countTokens` endpoint.
+
+        Returns an integer token count. Falls back to 0 only if the response shape is unexpected.
+        """
+        _validate_api_key(self.api_key)
+        if not self.model:
+            raise RuntimeError("GEMINI_MODEL is required")
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{urllib.parse.quote(self.model)}:countTokens"
+        payload: dict[str, object] = {
+            "contents": list(contents),
+        }
+        if system:
+            payload["systemInstruction"] = {"parts": [{"text": str(system)}]}
+
+        tools_list: list[dict[str, object]] = []
+        if tools:
+            tools_list.extend(list(tools))
+        if use_google_search:
+            tools_list.append({"google_search": {}})
+        if use_url_context:
+            tools_list.append({"url_context": {}})
+        if use_code_execution:
+            tools_list.append({"code_execution": {}})
+        if tools_list:
+            payload["tools"] = tools_list
+        if cached_content:
+            payload["cachedContent"] = str(cached_content)
+
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=float(self.timeout_s)) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except URLError as exc:
+            raise RuntimeError(_format_connect_error(exc)) from exc
+        except HTTPError as exc:
+            raise RuntimeError(_format_http_error(exc)) from exc
+
+        # Expected shape: {"totalTokens": 123}
+        try:
+            total = data.get("totalTokens")  # type: ignore[union-attr]
+            if isinstance(total, int):
+                return int(total)
+        except Exception:
+            pass
+        return 0
+
+    def create_cache(
+        self,
+        *,
+        contents: list[dict[str, object]],
+        system: str | None = None,
+        ttl_seconds: int = 600,
+        display_name: str | None = None,
+    ) -> str:
+        """
+        Create an explicit cached content object and return its `name`.
+
+        This uses the `cachedContents` service (`POST /v1beta/cachedContents`).
+        """
+        _validate_api_key(self.api_key)
+        if not self.model:
+            raise RuntimeError("GEMINI_MODEL is required")
+
+        url = "https://generativelanguage.googleapis.com/v1beta/cachedContents"
+        model_name = str(self.model)
+        if not model_name.startswith("models/"):
+            model_name = f"models/{model_name}"
+
+        payload: dict[str, object] = {
+            "model": model_name,
+            "contents": list(contents),
+            "ttl": f"{int(ttl_seconds)}s",
+        }
+        if system:
+            payload["systemInstruction"] = {"parts": [{"text": str(system)}]}
+        if display_name:
+            payload["displayName"] = str(display_name)
+
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=float(self.timeout_s)) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except URLError as exc:
+            raise RuntimeError(_format_connect_error(exc)) from exc
+        except HTTPError as exc:
+            raise RuntimeError(_format_http_error(exc)) from exc
+
+        name = data.get("name") if isinstance(data, dict) else None
+        if not isinstance(name, str) or not name:
+            raise RuntimeError(f"Unexpected cachedContents create response: {data}")
+        return name
+
+    def delete_cache(self, name: str) -> None:
+        _validate_api_key(self.api_key)
+        if not name:
+            return
+        url = f"https://generativelanguage.googleapis.com/v1beta/{urllib.parse.quote(str(name), safe='/')}"
+        req = urllib.request.Request(
+            url,
+            headers={"x-goog-api-key": self.api_key},
+            method="DELETE",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=float(self.timeout_s)) as resp:
+                _ = resp.read()
+        except URLError as exc:
+            raise RuntimeError(_format_connect_error(exc)) from exc
         except HTTPError as exc:
             raise RuntimeError(_format_http_error(exc)) from exc
 

@@ -103,6 +103,19 @@ class Broker(Protocol):
         use_rth: bool = False,
     ) -> list["Bar"]: ...
 
+    # News / Research (optional, broker-dependent).
+    def list_news_providers(self) -> list["NewsProvider"]: ...
+    def get_historical_news(
+        self,
+        instrument: InstrumentSpec,
+        *,
+        provider_codes: list[str] | None = None,
+        start_datetime: str | None = None,
+        end_datetime: str | None = None,
+        max_results: int = 25,
+    ) -> list["NewsHeadline"]: ...
+    def get_news_article(self, *, provider_code: str, article_id: str, format: str = "TEXT") -> "NewsArticle": ...
+
 
 @dataclass(frozen=True)
 class MarketDataSnapshot:
@@ -168,3 +181,24 @@ class Bar:
     low: float
     close: float
     volume: float | None
+
+
+@dataclass(frozen=True)
+class NewsProvider:
+    code: str
+    name: str
+
+
+@dataclass(frozen=True)
+class NewsHeadline:
+    timestamp: str
+    provider_code: str
+    article_id: str
+    headline: str
+
+
+@dataclass(frozen=True)
+class NewsArticle:
+    provider_code: str
+    article_id: str
+    text: str

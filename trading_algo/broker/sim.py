@@ -11,6 +11,9 @@ from trading_algo.broker.base import (
     BracketOrderRequest,
     BracketOrderResult,
     MarketDataSnapshot,
+    NewsArticle,
+    NewsHeadline,
+    NewsProvider,
     OrderRequest,
     OrderResult,
     OrderStatus,
@@ -191,3 +194,28 @@ class SimBroker:
             raise RuntimeError("Broker is not connected")
         instrument = validate_instrument(instrument)
         return list(self.historical_bars.get(instrument, []))
+
+    def list_news_providers(self) -> list[NewsProvider]:
+        if not self.connected:
+            raise RuntimeError("Broker is not connected")
+        return []
+
+    def get_historical_news(
+        self,
+        instrument: InstrumentSpec,
+        *,
+        provider_codes: list[str] | None = None,
+        start_datetime: str | None = None,
+        end_datetime: str | None = None,
+        max_results: int = 25,
+    ) -> list[NewsHeadline]:
+        _ = (instrument, provider_codes, start_datetime, end_datetime, max_results)
+        if not self.connected:
+            raise RuntimeError("Broker is not connected")
+        return []
+
+    def get_news_article(self, *, provider_code: str, article_id: str, format: str = "TEXT") -> NewsArticle:
+        _ = (format,)
+        if not self.connected:
+            raise RuntimeError("Broker is not connected")
+        return NewsArticle(provider_code=str(provider_code), article_id=str(article_id), text="")

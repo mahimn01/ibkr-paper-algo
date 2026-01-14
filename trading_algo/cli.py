@@ -107,6 +107,9 @@ def _cmd_place_order(args: argparse.Namespace) -> int:
                 exchange=args.exchange,
                 currency=args.currency,
                 expiry=args.expiry,
+                right=getattr(args, "right", None),
+                strike=(float(getattr(args, "strike", 0.0)) if getattr(args, "strike", None) is not None else None),
+                multiplier=getattr(args, "multiplier", None),
             )
         )
         intent = TradeIntent(
@@ -165,7 +168,16 @@ def _cmd_snapshot(args: argparse.Namespace) -> int:
     broker.connect()
     try:
         instrument = validate_instrument(
-            InstrumentSpec(kind=args.kind, symbol=args.symbol, exchange=args.exchange, currency=args.currency, expiry=args.expiry)
+            InstrumentSpec(
+                kind=args.kind,
+                symbol=args.symbol,
+                exchange=args.exchange,
+                currency=args.currency,
+                expiry=args.expiry,
+                right=getattr(args, "right", None),
+                strike=(float(getattr(args, "strike", 0.0)) if getattr(args, "strike", None) is not None else None),
+                multiplier=getattr(args, "multiplier", None),
+            )
         )
         snap = broker.get_market_data_snapshot(instrument)
         print(
@@ -189,7 +201,16 @@ def _cmd_history(args: argparse.Namespace) -> int:
     broker.connect()
     try:
         instrument = validate_instrument(
-            InstrumentSpec(kind=args.kind, symbol=args.symbol, exchange=args.exchange, currency=args.currency, expiry=args.expiry)
+            InstrumentSpec(
+                kind=args.kind,
+                symbol=args.symbol,
+                exchange=args.exchange,
+                currency=args.currency,
+                expiry=args.expiry,
+                right=getattr(args, "right", None),
+                strike=(float(getattr(args, "strike", 0.0)) if getattr(args, "strike", None) is not None else None),
+                multiplier=getattr(args, "multiplier", None),
+            )
         )
         bars = broker.get_historical_bars(
             instrument,
@@ -299,6 +320,9 @@ def _cmd_modify_order(args: argparse.Namespace) -> int:
                 exchange=args.exchange,
                 currency=args.currency,
                 expiry=args.expiry,
+                right=getattr(args, "right", None),
+                strike=(float(getattr(args, "strike", 0.0)) if getattr(args, "strike", None) is not None else None),
+                multiplier=getattr(args, "multiplier", None),
             )
         )
         req = OrderRequest(
@@ -349,7 +373,16 @@ def _cmd_place_bracket(args: argparse.Namespace) -> int:
     broker.connect()
     try:
         instrument = validate_instrument(
-            InstrumentSpec(kind=args.kind, symbol=args.symbol, exchange=args.exchange, currency=args.currency, expiry=args.expiry)
+            InstrumentSpec(
+                kind=args.kind,
+                symbol=args.symbol,
+                exchange=args.exchange,
+                currency=args.currency,
+                expiry=args.expiry,
+                right=getattr(args, "right", None),
+                strike=(float(getattr(args, "strike", 0.0)) if getattr(args, "strike", None) is not None else None),
+                multiplier=getattr(args, "multiplier", None),
+            )
         )
         if cfg.dry_run:
             print(
@@ -398,7 +431,16 @@ def _cmd_paper_smoke(args: argparse.Namespace) -> int:
     broker.connect()
     try:
         instrument = validate_instrument(
-            InstrumentSpec(kind=args.kind, symbol=args.symbol, exchange=args.exchange, currency=args.currency, expiry=args.expiry)
+            InstrumentSpec(
+                kind=args.kind,
+                symbol=args.symbol,
+                exchange=args.exchange,
+                currency=args.currency,
+                expiry=args.expiry,
+                right=getattr(args, "right", None),
+                strike=(float(getattr(args, "strike", 0.0)) if getattr(args, "strike", None) is not None else None),
+                multiplier=getattr(args, "multiplier", None),
+            )
         )
         snap = broker.get_market_data_snapshot(instrument)
         print(
@@ -487,7 +529,16 @@ def _cmd_oms_track(args: argparse.Namespace) -> int:
 
 def _cmd_backtest(args: argparse.Namespace) -> int:
     instrument = validate_instrument(
-        InstrumentSpec(kind=args.kind, symbol=args.symbol, exchange=args.exchange, currency=args.currency, expiry=args.expiry)
+        InstrumentSpec(
+            kind=args.kind,
+            symbol=args.symbol,
+            exchange=args.exchange,
+            currency=args.currency,
+            expiry=args.expiry,
+            right=getattr(args, "right", None),
+            strike=(float(getattr(args, "strike", 0.0)) if getattr(args, "strike", None) is not None else None),
+            multiplier=getattr(args, "multiplier", None),
+        )
     )
     series = load_bars_csv(args.csv, instrument)
     cfg = BacktestConfig(
@@ -514,7 +565,16 @@ def _cmd_export_history(args: argparse.Namespace) -> int:
     broker.connect()
     try:
         instrument = validate_instrument(
-            InstrumentSpec(kind=args.kind, symbol=args.symbol, exchange=args.exchange, currency=args.currency, expiry=args.expiry)
+            InstrumentSpec(
+                kind=args.kind,
+                symbol=args.symbol,
+                exchange=args.exchange,
+                currency=args.currency,
+                expiry=args.expiry,
+                right=getattr(args, "right", None),
+                strike=(float(getattr(args, "strike", 0.0)) if getattr(args, "strike", None) is not None else None),
+                multiplier=getattr(args, "multiplier", None),
+            )
         )
         export_cfg = ExportConfig(
             duration_per_call=args.duration_per_call,
@@ -634,11 +694,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     place = sub.add_parser("place-order", help="Place a single test order")
     place.add_argument("--broker", choices=["ibkr", "sim"], default="sim")
-    place.add_argument("--kind", choices=["STK", "FUT", "FX"], default="STK")
+    place.add_argument("--kind", choices=["STK", "FUT", "FX", "OPT"], default="STK")
     place.add_argument("--symbol", required=True)
     place.add_argument("--exchange", default=None)
     place.add_argument("--currency", default=None)
-    place.add_argument("--expiry", default=None, help="FUT only: YYYYMM or YYYYMMDD")
+    place.add_argument("--expiry", default=None, help="FUT: YYYYMM or YYYYMMDD, OPT: YYYYMMDD")
+    place.add_argument("--right", choices=["C", "P"], default=None, help="OPT only: C or P")
+    place.add_argument("--strike", default=None, help="OPT only: strike price")
+    place.add_argument("--multiplier", default=None, help="OPT only: contract multiplier (default 100)")
     place.add_argument("--side", choices=["BUY", "SELL"], required=True)
     place.add_argument("--qty", required=True)
     place.add_argument("--type", choices=["MKT", "LMT", "STP", "STPLMT"], default="MKT")
@@ -655,20 +718,26 @@ def build_parser() -> argparse.ArgumentParser:
 
     snap = sub.add_parser("snapshot", help="Fetch a market data snapshot")
     snap.add_argument("--broker", choices=["ibkr", "sim"], default="sim")
-    snap.add_argument("--kind", choices=["STK", "FUT", "FX"], default="STK")
+    snap.add_argument("--kind", choices=["STK", "FUT", "FX", "OPT"], default="STK")
     snap.add_argument("--symbol", required=True)
     snap.add_argument("--exchange", default=None)
     snap.add_argument("--currency", default=None)
-    snap.add_argument("--expiry", default=None, help="FUT only: YYYYMM or YYYYMMDD")
+    snap.add_argument("--expiry", default=None, help="FUT: YYYYMM or YYYYMMDD, OPT: YYYYMMDD")
+    snap.add_argument("--right", choices=["C", "P"], default=None, help="OPT only: C or P")
+    snap.add_argument("--strike", default=None, help="OPT only: strike price")
+    snap.add_argument("--multiplier", default=None, help="OPT only: contract multiplier (default 100)")
     snap.set_defaults(func=_cmd_snapshot)
 
     hist = sub.add_parser("history", help="Fetch historical bars (IBKR reqHistoricalData)")
     hist.add_argument("--broker", choices=["ibkr", "sim"], default="sim")
-    hist.add_argument("--kind", choices=["STK", "FUT", "FX"], default="STK")
+    hist.add_argument("--kind", choices=["STK", "FUT", "FX", "OPT"], default="STK")
     hist.add_argument("--symbol", required=True)
     hist.add_argument("--exchange", default=None)
     hist.add_argument("--currency", default=None)
-    hist.add_argument("--expiry", default=None, help="FUT only: YYYYMM or YYYYMMDD")
+    hist.add_argument("--expiry", default=None, help="FUT: YYYYMM or YYYYMMDD, OPT: YYYYMMDD")
+    hist.add_argument("--right", choices=["C", "P"], default=None, help="OPT only: C or P")
+    hist.add_argument("--strike", default=None, help="OPT only: strike price")
+    hist.add_argument("--multiplier", default=None, help="OPT only: contract multiplier (default 100)")
     hist.add_argument("--duration", default="1 D", help="IBKR durationStr (e.g. '1 D', '2 W')")
     hist.add_argument("--bar-size", default="5 mins", help="IBKR barSizeSetting (e.g. '1 min', '5 mins')")
     hist.add_argument("--what-to-show", default="TRADES")
@@ -695,11 +764,14 @@ def build_parser() -> argparse.ArgumentParser:
     mod = sub.add_parser("modify-order", help="Modify an existing order by orderId")
     mod.add_argument("--broker", choices=["ibkr", "sim"], default="sim")
     mod.add_argument("--order-id", required=True)
-    mod.add_argument("--kind", choices=["STK", "FUT", "FX"], default="STK")
+    mod.add_argument("--kind", choices=["STK", "FUT", "FX", "OPT"], default="STK")
     mod.add_argument("--symbol", required=True)
     mod.add_argument("--exchange", default=None)
     mod.add_argument("--currency", default=None)
-    mod.add_argument("--expiry", default=None, help="FUT only: YYYYMM or YYYYMMDD")
+    mod.add_argument("--expiry", default=None, help="FUT: YYYYMM or YYYYMMDD, OPT: YYYYMMDD")
+    mod.add_argument("--right", choices=["C", "P"], default=None, help="OPT only: C or P")
+    mod.add_argument("--strike", default=None, help="OPT only: strike price")
+    mod.add_argument("--multiplier", default=None, help="OPT only: contract multiplier (default 100)")
     mod.add_argument("--side", choices=["BUY", "SELL"], required=True)
     mod.add_argument("--qty", required=True)
     mod.add_argument("--type", choices=["MKT", "LMT", "STP", "STPLMT"], default="LMT")
@@ -716,11 +788,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     bracket = sub.add_parser("place-bracket", help="Place a bracket order (LMT entry + TP LMT + SL STP)")
     bracket.add_argument("--broker", choices=["ibkr", "sim"], default="sim")
-    bracket.add_argument("--kind", choices=["STK", "FUT", "FX"], default="STK")
+    bracket.add_argument("--kind", choices=["STK", "FUT", "FX", "OPT"], default="STK")
     bracket.add_argument("--symbol", required=True)
     bracket.add_argument("--exchange", default=None)
     bracket.add_argument("--currency", default=None)
-    bracket.add_argument("--expiry", default=None, help="FUT only: YYYYMM or YYYYMMDD")
+    bracket.add_argument("--expiry", default=None, help="FUT: YYYYMM or YYYYMMDD, OPT: YYYYMMDD")
+    bracket.add_argument("--right", choices=["C", "P"], default=None, help="OPT only: C or P")
+    bracket.add_argument("--strike", default=None, help="OPT only: strike price")
+    bracket.add_argument("--multiplier", default=None, help="OPT only: contract multiplier (default 100)")
     bracket.add_argument("--side", choices=["BUY", "SELL"], required=True)
     bracket.add_argument("--qty", required=True)
     bracket.add_argument("--entry-limit", required=True)
@@ -731,11 +806,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     smoke = sub.add_parser("paper-smoke", help="Paper connectivity smoke test (connect + verify paper + snapshot; optional place+cancel)")
     smoke.add_argument("--broker", choices=["ibkr"], default="ibkr")
-    smoke.add_argument("--kind", choices=["STK", "FUT", "FX"], default="STK")
+    smoke.add_argument("--kind", choices=["STK", "FUT", "FX", "OPT"], default="STK")
     smoke.add_argument("--symbol", default="AAPL")
     smoke.add_argument("--exchange", default=None)
     smoke.add_argument("--currency", default=None)
-    smoke.add_argument("--expiry", default=None, help="FUT only: YYYYMM or YYYYMMDD")
+    smoke.add_argument("--expiry", default=None, help="FUT: YYYYMM or YYYYMMDD, OPT: YYYYMMDD")
+    smoke.add_argument("--right", choices=["C", "P"], default=None, help="OPT only: C or P")
+    smoke.add_argument("--strike", default=None, help="OPT only: strike price")
+    smoke.add_argument("--multiplier", default=None, help="OPT only: contract multiplier (default 100)")
     smoke.add_argument("--order-test", action="store_true", help="Place a tiny LMT order and cancel it (requires TRADING_LIVE_ENABLED + token)")
     smoke.add_argument("--side", choices=["BUY", "SELL"], default="BUY")
     smoke.add_argument("--qty", default="1")
@@ -753,11 +831,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     bt = sub.add_parser("backtest", help="Run a deterministic historical backtest from a CSV file")
     bt.add_argument("--csv", required=True, help="CSV with columns: timestamp,open,high,low,close[,volume]")
-    bt.add_argument("--kind", choices=["STK", "FUT", "FX"], default="STK")
+    bt.add_argument("--kind", choices=["STK", "FUT", "FX", "OPT"], default="STK")
     bt.add_argument("--symbol", required=True)
     bt.add_argument("--exchange", default=None)
     bt.add_argument("--currency", default=None)
     bt.add_argument("--expiry", default=None)
+    bt.add_argument("--right", choices=["C", "P"], default=None)
+    bt.add_argument("--strike", default=None)
+    bt.add_argument("--multiplier", default=None)
     bt.add_argument("--initial-cash", type=float, default=100000.0)
     bt.add_argument("--commission-per-order", type=float, default=0.0)
     bt.add_argument("--slippage-bps", type=float, default=0.0)
@@ -767,11 +848,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     exp = sub.add_parser("export-history", help="Export IBKR historical bars to a backtest CSV")
     exp.add_argument("--broker", choices=["ibkr"], default="ibkr")
-    exp.add_argument("--kind", choices=["STK", "FUT", "FX"], default="STK")
+    exp.add_argument("--kind", choices=["STK", "FUT", "FX", "OPT"], default="STK")
     exp.add_argument("--symbol", required=True)
     exp.add_argument("--exchange", default=None)
     exp.add_argument("--currency", default=None)
     exp.add_argument("--expiry", default=None)
+    exp.add_argument("--right", choices=["C", "P"], default=None)
+    exp.add_argument("--strike", default=None)
+    exp.add_argument("--multiplier", default=None)
     exp.add_argument("--out-csv", required=True)
     exp.add_argument("--overwrite", action="store_true")
     exp.add_argument("--bar-size", default="5 mins")

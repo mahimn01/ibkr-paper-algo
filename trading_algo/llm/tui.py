@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+import subprocess
+import shutil
 import threading
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -10,6 +12,10 @@ from trading_algo.llm.chat_protocol import ToolCall
 
 
 class PromptToolkitMissing(RuntimeError):
+    pass
+
+
+class UserCancelled(RuntimeError):
     pass
 
 
@@ -37,24 +43,28 @@ def run_tui(
     try:  # pragma: no cover
         from prompt_toolkit.application import Application, run_in_terminal
         from prompt_toolkit.key_binding import KeyBindings
+        from prompt_toolkit.lexers import PygmentsLexer
         from prompt_toolkit.layout import Layout
         from prompt_toolkit.layout.containers import HSplit, Window
         from prompt_toolkit.layout.controls import FormattedTextControl
         from prompt_toolkit.layout.dimension import D
-        from prompt_toolkit.layout.margins import ScrollbarMargin
         from prompt_toolkit.styles import Style
         from prompt_toolkit.widgets import Frame, TextArea
+        from pygments.lexers.markup import MarkdownLexer
     except Exception as exc:  # pragma: no cover
         raise PromptToolkitMissing("prompt_toolkit is required for --ui tui") from exc
 
-    transcript_fragments: list[tuple[str, str]] = []
     transcript_plain = {"value": ""}
-    transcript_ctl = FormattedTextControl(text=transcript_fragments, focusable=False, show_cursor=False)
-    transcript_win = Window(
-        content=transcript_ctl,
+    transcript_area = TextArea(
+        text="",
+        multiline=True,
         wrap_lines=True,
-        always_hide_cursor=True,
-        right_margins=[ScrollbarMargin(display_arrows=True)],
+        read_only=True,
+        scrollbar=True,
+        focusable=False,  # keep focus in the input box (avoid getting "stuck" in transcript)
+        focus_on_click=False,
+        lexer=PygmentsLexer(MarkdownLexer),
+        name="transcript",
     )
     status_text = {"value": "Ready"}
     status_ctl = FormattedTextControl(text=[("class:status", status_text["value"])])
@@ -63,9 +73,12 @@ def run_tui(
         "status": "Ready",
         "spinner_i": 0,
         "active_tool": None,
-        "md_in_code_fence": False,
+        "auto_scroll": True,
     }
     tool_verbose = os.getenv("TUI_TOOL_VERBOSE", "").strip().lower() in {"1", "true", "yes", "y", "on"}
+    max_chars_env = os.getenv("TUI_MAX_TRANSCRIPT_CHARS", "").strip()
+    max_transcript_chars = int(max_chars_env) if max_chars_env.isdigit() else 750_000
+    mouse_support = os.getenv("TUI_MOUSE", "").strip().lower() in {"1", "true", "yes", "y", "on"}
 
     input_box = TextArea(
         height=3,
@@ -77,6 +90,70 @@ def run_tui(
     # prompt_toolkit doesn't expose the asyncio loop on Application in all versions.
     # Capture it from the UI thread when available and use it for thread-safe scheduling.
     ui_loop: asyncio.AbstractEventLoop | None = None
+    cancel_event = threading.Event()
+
+    def _copy_to_clipboard(text: str) -> bool:
+        """
+        Best-effort system clipboard copy.
+
+        Prefer platform utilities so users can paste outside the terminal.
+        """
+        if not text:
+            return False
+
+        if shutil.which("pbcopy"):
+            p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
+            assert p.stdin is not None
+            p.stdin.write(text.encode("utf-8"))
+            p.stdin.close()
+            return p.wait(timeout=5) == 0
+
+        if shutil.which("wl-copy"):
+            p = subprocess.Popen(["wl-copy"], stdin=subprocess.PIPE)
+            assert p.stdin is not None
+            p.stdin.write(text.encode("utf-8"))
+            p.stdin.close()
+            return p.wait(timeout=5) == 0
+
+        if shutil.which("xclip"):
+            p = subprocess.Popen(["xclip", "-selection", "clipboard"], stdin=subprocess.PIPE)
+            assert p.stdin is not None
+            p.stdin.write(text.encode("utf-8"))
+            p.stdin.close()
+            return p.wait(timeout=5) == 0
+
+        return False
+
+    def _visible_height_estimate() -> int:
+        """
+        Estimate how many rows the transcript can show.
+
+        prompt_toolkit doesn't easily expose the exact write_position height of a
+        container without running a render pass. This heuristic is good enough
+        to keep scrolling stable (and avoid "blank screen" when scroll is too
+        large).
+        """
+        try:
+            rows = int(app.output.get_size().rows)  # type: ignore[attr-defined]
+        except Exception:
+            rows = 40
+        # status bar (1) + input frame (~5) + borders/padding (~2)
+        return max(5, rows - 8)
+
+    def _content_rows_estimate() -> int:
+        # Conservative (no wrapping). Wrapping increases the true height, which
+        # makes this estimate safe for clamping.
+        return max(1, transcript_plain["value"].count("\n") + 1)
+
+    def _max_scroll_estimate() -> int:
+        return max(0, _content_rows_estimate() - _visible_height_estimate())
+
+    def _scroll_to_bottom() -> None:
+        try:
+            transcript_area.window.vertical_scroll = _max_scroll_estimate()
+            transcript_area.buffer.cursor_position = len(transcript_area.buffer.text)
+        except Exception:
+            pass
 
     def _call_in_loop(fn: Callable[[], None]) -> None:
         """
@@ -111,24 +188,32 @@ def run_tui(
         status_ctl.text = [("class:status", status_text["value"])]
 
     def _append_transcript(prefix: str, text: str) -> None:
-        _append_rich_text(f"{prefix}{text}")
-        # Scroll to bottom.
+        # Keep the UI responsive for long sessions by trimming oldest transcript.
+        # (The full chat history for the model is managed separately.)
+        if max_transcript_chars > 0:
+            plain = transcript_plain["value"]
+            if len(plain) > max_transcript_chars:
+                # Drop ~10% at a time, cutting at a newline boundary when possible.
+                drop = max(1, int(max_transcript_chars * 0.1))
+                cut = plain.find("\n", drop)
+                if cut == -1:
+                    cut = drop
+                transcript_plain["value"] = plain[cut:]
+                transcript_area.text = transcript_plain["value"]
+
+        combined = f"{prefix}{text}"
+        transcript_plain["value"] += combined
+        # Efficient append into the buffer so we don't re-render the whole transcript for streaming.
         try:
-            transcript_win.vertical_scroll = 10**9  # type: ignore[attr-defined]
+            transcript_area.buffer.cursor_position = len(transcript_area.buffer.text)
+            transcript_area.buffer.insert_text(combined, move_cursor=True)
         except Exception:
-            pass
+            # Fallback: reset full text.
+            transcript_area.text = transcript_plain["value"]
 
-    def _append_rich_text(text: str) -> None:
-        """
-        Append text to transcript with lightweight markdown + tool styling.
-
-        This is intentionally minimal and incremental (stream-friendly).
-        """
-        fragments = _render_incremental(text, ui_state)
-        if fragments:
-            transcript_plain["value"] += str(text)
-            transcript_fragments.extend(fragments)
-            transcript_ctl.text = transcript_fragments
+        # Scroll to bottom.
+        if ui_state.get("auto_scroll"):
+            _scroll_to_bottom()
 
     def _summarize_tool_result(name: str, ok: bool, result: Any) -> str:
         if not isinstance(result, dict):
@@ -152,8 +237,10 @@ def run_tui(
         _append_transcript("\n\n[tool] ", _summarize_tool_result(name, ok, result))
         _append_transcript("\n", "")
         if tool_verbose:
-            _append_transcript("\n       args: ", str(call.args))
-            _append_transcript("\n     result: ", str(result))
+            _append_transcript("\n\n```json\n", "")
+            _append_transcript("", f"args: {call.args}\n")
+            _append_transcript("", f"result: {result}\n")
+            _append_transcript("```\n", "")
 
     style = Style.from_dict(
         {
@@ -171,6 +258,15 @@ def run_tui(
     )
 
     kb = KeyBindings()
+
+    @kb.add("escape")
+    def _cancel(event) -> None:  # pragma: no cover
+        # ESC cancels the current in-flight model turn (best-effort).
+        if not ui_state.get("busy"):
+            return
+        cancel_event.set()
+        _set_status("Cancelling…")
+        event.app.invalidate()
 
     @kb.add("c-c")  # pragma: no cover
     @kb.add("c-d")  # pragma: no cover
@@ -190,6 +286,27 @@ def run_tui(
         user_text = input_box.text.strip()
         input_box.text = ""
         if not user_text:
+            return
+
+        if user_text.strip().startswith("/copy"):
+            # Copy transcript to system clipboard.
+            parts = user_text.strip().split()
+            mode = parts[1].strip().lower() if len(parts) > 1 else "200"
+            text = transcript_plain["value"]
+            if mode not in {"all"}:
+                try:
+                    last_n = max(1, int(mode))
+                except Exception:
+                    last_n = 200
+                lines = text.splitlines()
+                text = "\n".join(lines[-last_n:]) + ("\n" if lines else "")
+            ok = _copy_to_clipboard(text)
+            _append_transcript("\n\nyou> ", user_text)
+            _append_transcript("\n\nGemini> ", "Copied to clipboard." if ok else "Clipboard copy failed (no pbcopy/wl-copy/xclip).")
+            _append_transcript("\n", "")
+            _set_status("Ready")
+            input_box.read_only = False
+            app.invalidate()
             return
 
         if user_text.strip() == "/unlock" and unlock is not None:
@@ -224,6 +341,7 @@ def run_tui(
 
         _append_transcript("\n\nyou> ", user_text)
         _append_transcript("\n\nGemini> ", "")
+        cancel_event.clear()
         _set_status("Thinking…")
         input_box.read_only = True
         app.invalidate()
@@ -244,6 +362,8 @@ def run_tui(
             _append_transcript("", text)
 
         def _stream_cb(tok: str) -> None:
+            if cancel_event.is_set():
+                raise UserCancelled()
             t = str(tok)
             if not t:
                 return
@@ -255,9 +375,13 @@ def run_tui(
             _call_in_loop(_flush_stream)
 
         def _tool_cb(call: ToolCall, ok: bool, result: Any) -> None:
+            if cancel_event.is_set():
+                raise UserCancelled()
             _call_in_loop(lambda: _append_tool_event(call, bool(ok), result))
 
         def _status_cb(text: str) -> None:
+            if cancel_event.is_set():
+                raise UserCancelled()
             t = str(text)
             def _do() -> None:
                 # Compact tool-start indicator in the transcript.
@@ -282,10 +406,19 @@ def run_tui(
                     _set_status("Ready")
                     input_box.read_only = False
                 _call_in_loop(_finish)
+            except UserCancelled:
+                def _cancelled() -> None:
+                    _flush_stream()
+                    _append_transcript("\n\n[tool] ", "… cancelled")
+                    _append_transcript("\n", "")
+                    _set_status("Ready")
+                    input_box.read_only = False
+                _call_in_loop(_cancelled)
             except Exception as exc:
+                err_text = str(exc)
                 def _err() -> None:
                     _flush_stream()
-                    _append_transcript("\n\nerror> ", str(exc))
+                    _append_transcript("\n\nerror> ", err_text)
                     _append_transcript("\n", "")
                     _set_status("Ready")
                     input_box.read_only = False
@@ -304,9 +437,65 @@ def run_tui(
     def _on_enter(event) -> None:  # pragma: no cover
         _submit_user_text(event.app)
 
+    def _scroll_transcript(delta_lines: int) -> None:
+        """
+        Scroll the transcript window by `delta_lines`.
+
+        Negative values scroll up (older messages), positive values scroll down.
+        """
+        try:
+            cur = int(getattr(transcript_area.window, "vertical_scroll", 0))
+        except Exception:
+            cur = 0
+        new = cur + int(delta_lines)
+        if new < 0:
+            new = 0
+        # Clamp to prevent scrolling past the bottom and ending up with a blank view.
+        max_scroll = _max_scroll_estimate()
+        if new > max_scroll:
+            new = max_scroll
+        try:
+            transcript_area.window.vertical_scroll = new
+        except Exception:
+            return
+        if delta_lines < 0:
+            ui_state["auto_scroll"] = False
+        app.invalidate()
+
+    @kb.add("<scroll-up>")  # mouse wheel up
+    def _on_scroll_up(event) -> None:  # pragma: no cover
+        _scroll_transcript(-5)
+
+    @kb.add("<scroll-down>")  # mouse wheel down
+    def _on_scroll_down(event) -> None:  # pragma: no cover
+        _scroll_transcript(+5)
+
+    @kb.add("pageup")
+    def _on_pageup(event) -> None:  # pragma: no cover
+        _scroll_transcript(-20)
+
+    @kb.add("pagedown")
+    def _on_pagedown(event) -> None:  # pragma: no cover
+        _scroll_transcript(+20)
+
+    @kb.add("home")
+    def _on_home(event) -> None:  # pragma: no cover
+        ui_state["auto_scroll"] = False
+        try:
+            transcript_area.window.vertical_scroll = 0
+        except Exception:
+            pass
+        event.app.invalidate()
+
+    @kb.add("end")
+    def _on_end(event) -> None:  # pragma: no cover
+        ui_state["auto_scroll"] = True
+        _scroll_to_bottom()
+        event.app.invalidate()
+
     root = HSplit(
         [
-            Frame(transcript_win, title="Chat", height=D(weight=3)),
+            Frame(transcript_area, title="Chat (PgUp/PgDn/Home/End to scroll, /copy [N|all])", height=D(weight=3)),
             Window(content=status_ctl, height=1, style="class:statusbar"),
             Frame(input_box, title="Input (Enter=send, Alt+Enter=newline, Ctrl-C=exit)"),
         ]
@@ -334,101 +523,8 @@ def run_tui(
         full_screen=True,
         style=style,
         refresh_interval=0.1,
+        mouse_support=mouse_support,
         before_render=_before_render,
         after_render=_after_render,
     )
     app.run()
-
-
-def _render_incremental(text: str, ui_state: dict[str, object]) -> list[tuple[str, str]]:
-    """
-    Extremely small markdown-ish renderer for prompt_toolkit formatted text.
-
-    Handles:
-    - Code fences ``` toggling a persistent state
-    - Headings (# ...)
-    - Inline code `...`
-    - Bold **...**
-    - Tool lines prefixed with "[tool]"
-    - 'Gemini>' prefix in blue
-    """
-    out: list[tuple[str, str]] = []
-    if not text:
-        return out
-
-    in_code = bool(ui_state.get("md_in_code_fence"))
-
-    i = 0
-    while i < len(text):
-        if text.startswith("```", i):
-            in_code = not in_code
-            ui_state["md_in_code_fence"] = in_code
-            out.append(("class:md_code", "```"))
-            i += 3
-            continue
-
-        ch = text[i]
-
-        # Start-of-line heuristics (headings and tool tag).
-        # We only apply if we are not in a code fence.
-        if not in_code:
-            # Find the line start.
-            line_start = text.rfind("\n", 0, i) + 1
-            if i == line_start:
-                if text.startswith("Gemini> ", i):
-                    out.append(("class:md_heading", "Gemini>"))
-                    out.append(("", " "))
-                    i += len("Gemini> ")
-                    continue
-                if text.startswith("[tool]", i):
-                    out.append(("class:tool_tag", "[tool]"))
-                    i += len("[tool]")
-                    continue
-                if text.startswith("#", i):
-                    # Consume the whole heading marker run ("###").
-                    j = i
-                    while j < len(text) and text[j] == "#":
-                        j += 1
-                    out.append(("class:md_heading", text[i:j]))
-                    i = j
-                    continue
-
-        # Inline parsing.
-        if in_code:
-            out.append(("class:md_code", ch))
-            i += 1
-            continue
-
-        if text.startswith("**", i):
-            # Toggle bold: we don't keep state; just render the markers dim and text bold until next **.
-            end = text.find("**", i + 2)
-            if end != -1:
-                out.append(("class:tool_dim", "**"))
-                out.append(("class:md_bold", text[i + 2 : end]))
-                out.append(("class:tool_dim", "**"))
-                i = end + 2
-                continue
-
-        if ch == "`":
-            end = text.find("`", i + 1)
-            if end != -1:
-                out.append(("class:tool_dim", "`"))
-                out.append(("class:md_code", text[i + 1 : end]))
-                out.append(("class:tool_dim", "`"))
-                i = end + 1
-                continue
-
-        # Tool status words (OK/ERR) just after [tool] in our own emitted lines.
-        if text.startswith("OK  ", i):
-            out.append(("class:tool_ok", "OK  "))
-            i += 4
-            continue
-        if text.startswith("ERR ", i):
-            out.append(("class:tool_err", "ERR "))
-            i += 4
-            continue
-
-        out.append(("", ch))
-        i += 1
-
-    return out

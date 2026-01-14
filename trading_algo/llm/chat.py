@@ -8,11 +8,13 @@ import sys
 import time
 from dataclasses import dataclass
 from typing import Any, Callable
+import inspect
 
 from trading_algo.broker.base import Broker
 from trading_algo.config import IBKRConfig, TradingConfig
 from trading_algo.llm.chat_protocol import ChatModelReply, ToolCall
 from trading_algo.llm.config import LLMConfig
+from trading_algo.llm.context_manager import maybe_compact_history
 from trading_algo.llm.gemini import GeminiClient, LLMClient
 from trading_algo.llm.tools import ToolError, dispatch_tool, gemini_function_declarations, list_tools
 from trading_algo.llm.tui import PromptToolkitMissing, run_tui
@@ -48,6 +50,36 @@ def _pp(obj: Any) -> str:
     except Exception:
         return str(obj)
 
+def _call_generate_content(client: LLMClient, **kwargs: object) -> dict[str, object]:
+    """
+    Call `client.generate_content` while remaining compatible with older test doubles.
+
+    Some unit tests use lightweight fake clients that don't accept newly-added kwargs.
+    We filter kwargs based on the callable signature.
+    """
+    fn = getattr(client, "generate_content")
+    try:
+        params = set(inspect.signature(fn).parameters.keys())
+        filtered = {k: v for k, v in kwargs.items() if k in params}
+        return fn(**filtered)  # type: ignore[misc]
+    except Exception:
+        # Last-resort: call with the historical baseline args.
+        baseline_keys = {"contents", "system", "tools", "use_google_search", "cached_content"}
+        filtered = {k: v for k, v in kwargs.items() if k in baseline_keys}
+        return fn(**filtered)  # type: ignore[misc]
+
+
+def _call_stream_generate_content(client: LLMClient, **kwargs: object):
+    fn = getattr(client, "stream_generate_content")
+    try:
+        params = set(inspect.signature(fn).parameters.keys())
+        filtered = {k: v for k, v in kwargs.items() if k in params}
+        return fn(**filtered)  # type: ignore[misc]
+    except Exception:
+        baseline_keys = {"contents", "system", "tools", "use_google_search", "cached_content"}
+        filtered = {k: v for k, v in kwargs.items() if k in baseline_keys}
+        return fn(**filtered)  # type: ignore[misc]
+
 
 @dataclass
 class ChatSession:
@@ -64,6 +96,8 @@ class ChatSession:
     def __post_init__(self) -> None:
         # Gemini `contents` format, stored verbatim for thought-signature correctness.
         self._contents: list[dict[str, object]] = []
+        self._last_usage_metadata: dict[str, object] | None = None
+        self._last_grounding_metadata: dict[str, object] | None = None
 
     def add_user_message(self, text: str) -> None:
         self._contents.append({"role": "user", "parts": [{"text": str(text)}]})
@@ -87,6 +121,7 @@ class ChatSession:
             raise RuntimeError("GEMINI_API_KEY must be set")
 
         oms = OrderManager(self.broker, self.trading, confirm_token=self.confirm_token)
+        cache_name: str | None = None
         try:
             tool_decl = {"functionDeclarations": gemini_function_declarations()}
             tools = [tool_decl]
@@ -94,47 +129,118 @@ class ChatSession:
 
             assistant_acc: list[str] = []
 
+            # Split history into a cacheable prefix and a dynamic suffix (the current user turn).
+            prefix: list[dict[str, object]] = []
+            suffix: list[dict[str, object]] = []
+            if self._contents and isinstance(self._contents[-1], dict) and self._contents[-1].get("role") == "user":
+                prefix = list(self._contents[:-1])
+                suffix = [self._contents[-1]]
+            else:
+                prefix = list(self._contents)
+
+            # If enabled, prefetch a grounded research brief via Google Search.
+            # NOTE: Gemini built-in tools are not always compatible with custom function calling tool declarations.
+            # We run this as a separate request (no functionDeclarations) and feed the result into the tool loop.
+            research_brief = None
+            prefetch_attempted = False
+            if use_search and suffix and isinstance(suffix[0], dict):
+                user_text = _extract_text_from_content(suffix[0]) if suffix[0].get("parts") else ""
+                if user_text and _should_prefetch_google_search_brief(user_text):
+                    prefetch_attempted = True
+                    if on_status is not None:
+                        on_status("Researching (Google Search)…")
+                    research_brief = self._prefetch_google_search_brief(user_text)
+                    if research_brief:
+                        # Insert as context right before the current user message (suffix).
+                        prefix = list(prefix) + [
+                            {
+                                "role": "user",
+                                "parts": [
+                                    {
+                                        "text": (
+                                            "<google_search_brief>\n"
+                                            f"{research_brief}\n"
+                                            "</google_search_brief>\n"
+                                            "Use this as factual, cited context.\n"
+                                        )
+                                    }
+                                ],
+                            }
+                        ]
+            search_unavailable = bool(use_search) and bool(prefetch_attempted) and not bool(research_brief)
+
+            # Token-aware compaction on the stable prefix only (never touch current-turn tool loop content).
+            compacted, stats, _summary = maybe_compact_history(
+                client=self.client,
+                llm_cfg=self.llm,
+                system_prompt=_SYSTEM_PROMPT,
+                contents=prefix,
+                tools=tools,
+                use_google_search=False,
+            )
+            if compacted != prefix:
+                prefix = compacted
+                # Replace stored history (keep current user message at the end).
+                self._contents = list(prefix) + list(suffix)
+            else:
+                # Ensure our in-memory contents reflect any inserted research brief.
+                self._contents = list(prefix) + list(suffix)
+
+            # Optional explicit caching to reduce costs for multi-call tool loops.
+            dynamic_contents: list[dict[str, object]] | None = None
+            if (
+                self.llm.gemini_explicit_caching
+                and hasattr(self.client, "create_cache")
+                and hasattr(self.client, "delete_cache")
+                and prefix
+                and int((stats.exact_tokens or stats.approx_tokens)) >= int(self.llm.gemini_cache_min_tokens)
+            ):
+                cache_name = getattr(self.client, "create_cache")(
+                    contents=list(prefix),
+                    system=_SYSTEM_PROMPT,
+                    ttl_seconds=int(self.llm.gemini_cache_ttl_seconds),
+                    display_name="oms-chat-turn",
+                )
+                dynamic_contents = list(suffix)
+
             for _ in range(int(self.max_tool_rounds)):
                 if on_status is not None:
                     on_status("Thinking…")
 
                 try:
                     model_content, emitted = self._call_model_with_tools(
+                        contents=(dynamic_contents if dynamic_contents is not None else list(self._contents)),
+                        system=(None if dynamic_contents is not None else _SYSTEM_PROMPT),
                         tools=tools,
-                        use_google_search=use_search,
+                        # Built-in tools + function calling are not reliably supported together.
+                        # Google Search grounding is handled via the research prefetch step above.
+                        use_google_search=False,
                         on_stream_token=on_stream_token if self.stream else None,
+                        cached_content=cache_name,
                     )
                 except Exception as exc:
-                    # If Google Search is enabled, retry once without it (some API configs disallow mixing tools).
-                    if use_search:
-                        try:
-                            model_content, emitted = self._call_model_with_tools(
-                                tools=tools,
-                                use_google_search=False,
-                                on_stream_token=on_stream_token if self.stream else None,
-                            )
-                        except Exception as exc2:
-                            msg = f"LLM request failed: {exc2}"
-                            if on_status is not None:
-                                on_status("Ready")
-                            return ChatModelReply(assistant_message=msg, tool_calls=[])
-                    else:
-                        msg = f"LLM request failed: {exc}"
-                        if on_status is not None:
-                            on_status("Ready")
-                        return ChatModelReply(assistant_message=msg, tool_calls=[])
+                    msg = f"LLM request failed: {exc}"
+                    if on_status is not None:
+                        on_status("Ready")
+                    return ChatModelReply(assistant_message=msg, tool_calls=[])
 
                 if emitted:
                     assistant_acc.append(emitted)
 
                 # Persist model content verbatim for thought-signature correctness.
                 self._contents.append(model_content)
+                if dynamic_contents is not None:
+                    dynamic_contents.append(model_content)
 
                 calls = _extract_function_calls(model_content)
                 if not calls:
+                    msg = "".join(assistant_acc).strip()
+                    if search_unavailable:
+                        msg = ("_(note: Google Search grounding is enabled, but no search brief was available for this turn.)_\n\n" + msg).strip()
+                    msg = _maybe_add_citations(msg, self._last_grounding_metadata)
                     if on_status is not None:
-                        on_status("Ready")
-                    return ChatModelReply(assistant_message="".join(assistant_acc).strip(), tool_calls=[])
+                        on_status(_format_ready_status(self._last_usage_metadata))
+                    return ChatModelReply(assistant_message=msg, tool_calls=[])
 
                 function_response_parts: list[dict[str, object]] = []
                 tool_calls: list[ToolCall] = []
@@ -156,20 +262,31 @@ class ChatSession:
                     )
 
                 # Per Gemini docs: group parallel function responses together in one content block.
-                self._contents.append({"role": "user", "parts": function_response_parts})
+                fr_block = {"role": "user", "parts": function_response_parts}
+                self._contents.append(fr_block)
+                if dynamic_contents is not None:
+                    dynamic_contents.append(fr_block)
 
             if on_status is not None:
-                on_status("Ready")
+                on_status(_format_ready_status(self._last_usage_metadata))
             return ChatModelReply(assistant_message="".join(assistant_acc).strip() + "\n(Stopped after max_tool_rounds.)", tool_calls=[])
         finally:
             oms.close()
+            if cache_name and hasattr(self.client, "delete_cache") and self.llm.gemini_cache_delete_after_turn:
+                try:
+                    getattr(self.client, "delete_cache")(cache_name)
+                except Exception:
+                    pass
 
     def _call_model_with_tools(
         self,
         *,
+        contents: list[dict[str, object]],
+        system: str | None,
         tools: list[dict[str, object]],
         use_google_search: bool,
         on_stream_token: Callable[[str], None] | None,
+        cached_content: str | None,
     ) -> tuple[dict[str, object], str]:
         """
         Call Gemini with function calling enabled.
@@ -178,23 +295,41 @@ class ChatSession:
           (model_content, aggregated_text_emitted)
         """
         if not self.stream or on_stream_token is None:
-            data = self.client.generate_content(
-                contents=list(self._contents),
-                system=_SYSTEM_PROMPT,
+            data = _call_generate_content(
+                self.client,
+                contents=list(contents),
+                system=system,
                 tools=tools,
                 use_google_search=use_google_search,
+                use_url_context=False,
+                use_code_execution=False,
+                include_thoughts=bool(getattr(self.llm, "gemini_include_thoughts", False)),
+                cached_content=cached_content,
             )
+            self._last_usage_metadata = _extract_usage_metadata(data)
+            self._last_grounding_metadata = _extract_grounding_metadata(data)
             content = _extract_first_candidate_content(data)
-            return content, _extract_text_from_content(content)
+            # Do not treat "thought" parts as user-visible assistant text.
+            return content, _extract_text_from_content(content, include_thoughts=False)
 
         parts_acc: list[dict[str, object]] = []
         text_acc: list[str] = []
-        for evt in self.client.stream_generate_content(
-            contents=list(self._contents),
-            system=_SYSTEM_PROMPT,
+        for evt in _call_stream_generate_content(
+            self.client,
+            contents=list(contents),
+            system=system,
             tools=tools,
             use_google_search=use_google_search,
+            use_url_context=False,
+            use_code_execution=False,
+            include_thoughts=bool(getattr(self.llm, "gemini_include_thoughts", False)),
+            cached_content=cached_content,
         ):
+            if isinstance(evt, dict):
+                # Streaming usageMetadata is typically present in a final chunk.
+                um = evt.get("usageMetadata")
+                if isinstance(um, dict):
+                    self._last_usage_metadata = dict(um)
             content = _maybe_extract_candidate_content(evt)
             if not content:
                 continue
@@ -202,26 +337,70 @@ class ChatSession:
                 if not isinstance(part, dict):
                     continue
                 parts_acc.append(part)
+                # Stream thought summaries if present.
+                if bool(getattr(self.llm, "gemini_include_thoughts", False)) and part.get("thought") and part.get("text"):
+                    on_stream_token(f"\n\n[thought] {str(part.get('text')).strip()}\n")
+                    # Thought summaries are not part of the user-visible assistant message.
+                    continue
                 t = part.get("text")
                 if t:
                     s = str(t)
                     text_acc.append(s)
                     on_stream_token(s)
+            gm = _maybe_extract_grounding_metadata_from_event(evt)
+            if gm is not None:
+                self._last_grounding_metadata = gm
 
         model_content: dict[str, object] = {"role": "model", "parts": parts_acc}
         return model_content, "".join(text_acc)
 
+    def _prefetch_google_search_brief(self, user_text: str) -> str | None:
+        """
+        Fetch a short grounded research brief using Gemini's built-in Google Search tool.
+
+        This runs without custom function tools and returns text with citations inserted.
+        """
+        try:
+            data = _call_generate_content(
+                self.client,
+                contents=[{"role": "user", "parts": [{"text": str(user_text)}]}],
+                system=(
+                    "You are an expert trader doing rapid, factual research.\n"
+                    "If using Google Search grounding, summarize the most relevant recent information.\n"
+                    "Return:\n"
+                    "- 3-6 bullet points\n"
+                    "- include sources via citations\n"
+                    "Keep it short.\n"
+                ),
+                tools=None,
+                use_google_search=True,
+                use_url_context=False,
+                use_code_execution=False,
+                include_thoughts=bool(getattr(self.llm, "gemini_include_thoughts", False)),
+                cached_content=None,
+            )
+            gm = _extract_grounding_metadata(data)
+            content = _extract_first_candidate_content(data)
+            text = _extract_text_from_content(content).strip()
+            if not text:
+                return None
+            return _maybe_add_citations(text, gm)
+        except Exception:
+            return None
+
     def _execute_tool(self, call: ToolCall, oms: OrderManager) -> tuple[bool, Any]:
         try:
-            result = dispatch_tool(
-                call_name=call.name,
-                call_args=call.args,
-                broker=self.broker,
-                oms=oms,
-                allowed_kinds=self.llm.allowed_kinds(),
-                allowed_symbols=self.llm.allowed_symbols(),
-            )
-            return True, result
+                result = dispatch_tool(
+                    call_name=call.name,
+                    call_args=call.args,
+                    broker=self.broker,
+                    oms=oms,
+                    allowed_kinds=self.llm.allowed_kinds(),
+                    allowed_symbols=self.llm.allowed_symbols(),
+                    enforce_allowlist=bool(getattr(self.llm, "enforce_allowlist", False)),
+                    llm_client=self.client,
+                )
+                return True, result
         except ToolError as exc:
             return False, {"error": str(exc)}
         except Exception as exc:
@@ -229,13 +408,22 @@ class ChatSession:
 
 
 _SYSTEM_PROMPT = (
-    "You are a trading agent operating a PAPER-trading only OMS.\n"
-    "You may call provided functions (tools) to fetch data and to place/modify/cancel orders.\n"
+    "You are **Gemini**, an autonomous trading agent operating a PAPER-trading only OMS.\n"
+    "Your job is to research, reason, and execute trades (paper only) with high precision.\n"
+    "\n"
+    "You have these capabilities:\n"
+    "- OMS tools (function calling): market snapshots, positions/account, open orders, place/modify/cancel orders, OMS reconcile/track.\n"
+    "- IBKR news tools: list_news_providers, get_historical_news, get_news_article.\n"
+    "- Web research: you can call `research_web` to get a short, cited web-grounded brief (optionally with URL context and code execution).\n"
+    "- Optional Google Search grounding: the system may provide a `<google_search_brief>` context block with citations.\n"
+    "\n"
     "Rules:\n"
-    "- Never claim an order is placed unless the tool returns success.\n"
-    "- If you are unsure, call get_snapshot/get_positions/get_account/list_open_orders.\n"
-    "- Prefer limit orders when appropriate; be explicit about params.\n"
-    "- Use concise, readable Markdown in normal text.\n"
+    "- PAPER ONLY: never attempt live trading.\n"
+    "- Truthfulness: never claim an order was placed/modified/cancelled unless the tool result returns ok=true.\n"
+    "- If uncertain, fetch data via tools (get_snapshot/get_positions/get_account/list_open_orders/news tools).\n"
+    "- If a `<google_search_brief>` is present, treat it as grounded context and preserve its citations in your reasoning.\n"
+    "- Prefer limit orders when appropriate; be explicit about parameters and assumptions.\n"
+    "- Output: concise, readable Markdown.\n"
 )
 
 
@@ -271,12 +459,195 @@ def _maybe_extract_candidate_content(evt: object) -> dict[str, object] | None:
         return None
 
 
-def _extract_text_from_content(content: dict[str, object]) -> str:
+def _extract_text_from_content(content: dict[str, object], *, include_thoughts: bool = False) -> str:
     out: list[str] = []
     for part in list(content.get("parts") or []):
-        if isinstance(part, dict) and part.get("text"):
+        if not isinstance(part, dict) or not part.get("text"):
+            continue
+        if not include_thoughts and part.get("thought"):
+            continue
+        if part.get("text"):
             out.append(str(part.get("text")))
     return "".join(out)
+
+
+_GREETINGS = {
+    "hi",
+    "hello",
+    "hey",
+    "yo",
+    "sup",
+    "hola",
+    "howdy",
+    "good morning",
+    "good afternoon",
+    "good evening",
+}
+
+
+def _should_prefetch_google_search_brief(user_text: str) -> bool:
+    """
+    Avoid burning a Google Search request on non-search-worthy inputs (e.g. greetings).
+    Keep web search enabled by default, but only prefetch when it is likely useful.
+    """
+    text = user_text.strip()
+    if not text:
+        return False
+    lower = text.lower().strip()
+    if lower in _GREETINGS:
+        return False
+    if len(lower) <= 12 and lower.replace("!", "").replace(".", "") in _GREETINGS:
+        return False
+
+    # If it looks like a question or explicitly requests research, prefetch.
+    research_keywords = (
+        "news",
+        "headline",
+        "latest",
+        "today",
+        "yesterday",
+        "this week",
+        "what happened",
+        "why",
+        "how",
+        "when",
+        "search",
+        "web",
+        "research",
+        "article",
+        "source",
+        "cite",
+        "citation",
+        "earnings",
+        "macro",
+        "cpi",
+        "fed",
+        "rate",
+        "inflation",
+    )
+    if "?" in lower:
+        return True
+    if any(k in lower for k in research_keywords):
+        return True
+
+    # URLs or tickers/symbol-like tokens usually benefit from grounding.
+    if "http://" in lower or "https://" in lower or "www." in lower:
+        return True
+
+    tokens = [t.strip(".,:;()[]{}<>\"'") for t in text.split()]
+    if any(t.isdigit() for t in tokens):
+        return True
+    if any(t.isupper() and 1 <= len(t) <= 6 and t.isalpha() for t in tokens):
+        return True
+
+    # For longer prompts, a brief can still help.
+    return len(lower) >= 80
+
+
+def _extract_usage_metadata(data: dict[str, object]) -> dict[str, object] | None:
+    um = data.get("usageMetadata")
+    return dict(um) if isinstance(um, dict) else None
+
+
+def _extract_grounding_metadata(data: dict[str, object]) -> dict[str, object] | None:
+    try:
+        c0 = (data.get("candidates") or [])[0]
+        if not isinstance(c0, dict):
+            return None
+        gm = c0.get("groundingMetadata")
+        return dict(gm) if isinstance(gm, dict) else None
+    except Exception:
+        return None
+
+
+def _maybe_extract_grounding_metadata_from_event(evt: object) -> dict[str, object] | None:
+    try:
+        if not isinstance(evt, dict):
+            return None
+        candidates = evt.get("candidates")
+        if not isinstance(candidates, list) or not candidates:
+            return None
+        c0 = candidates[0]
+        if not isinstance(c0, dict):
+            return None
+        gm = c0.get("groundingMetadata")
+        return dict(gm) if isinstance(gm, dict) else None
+    except Exception:
+        return None
+
+
+def _format_ready_status(usage: dict[str, object] | None) -> str:
+    if not usage:
+        return "Ready"
+    try:
+        prompt = usage.get("promptTokenCount")
+        out = usage.get("candidatesTokenCount")
+        total = usage.get("totalTokenCount")
+        cached = usage.get("cachedContentTokenCount")
+        bits = []
+        if isinstance(prompt, int):
+            bits.append(f"p={prompt}")
+        if isinstance(out, int):
+            bits.append(f"o={out}")
+        if isinstance(total, int):
+            bits.append(f"t={total}")
+        if isinstance(cached, int) and cached > 0:
+            bits.append(f"cached={cached}")
+        if bits:
+            return "Ready · " + " ".join(bits)
+    except Exception:
+        pass
+    return "Ready"
+
+
+def _maybe_add_citations(text: str, grounding: dict[str, object] | None) -> str:
+    if not grounding or not text:
+        return text
+    supports = grounding.get("groundingSupports")
+    chunks = grounding.get("groundingChunks")
+    if not isinstance(supports, list) or not isinstance(chunks, list):
+        return text
+
+    # Build index->uri map.
+    uris: list[str | None] = []
+    for ch in chunks:
+        if not isinstance(ch, dict):
+            uris.append(None)
+            continue
+        web = ch.get("web")
+        if isinstance(web, dict) and isinstance(web.get("uri"), str):
+            uris.append(str(web.get("uri")))
+            continue
+        uris.append(None)
+
+    def _end_index(support: dict[str, object]) -> int:
+        seg = support.get("segment")
+        if isinstance(seg, dict) and isinstance(seg.get("endIndex"), int):
+            return int(seg.get("endIndex"))
+        return 0
+
+    sorted_supports = sorted([s for s in supports if isinstance(s, dict)], key=_end_index, reverse=True)
+    out = text
+    for s in sorted_supports:
+        seg = s.get("segment")
+        if not isinstance(seg, dict):
+            continue
+        end = seg.get("endIndex")
+        idxs = s.get("groundingChunkIndices")
+        if not isinstance(end, int) or not isinstance(idxs, list) or end <= 0:
+            continue
+        links: list[str] = []
+        for i in idxs:
+            if not isinstance(i, int):
+                continue
+            uri = uris[i] if 0 <= i < len(uris) else None
+            if uri:
+                links.append(f"[{i+1}]({uri})")
+        if not links:
+            continue
+        citation = " " + ", ".join(links)
+        out = out[:end] + citation + out[end:]
+    return out
 
 
 @dataclass(frozen=True)
@@ -344,6 +715,15 @@ def main(argv: list[str] | None = None) -> int:
     llm_cfg = LLMConfig.from_env()
     args = build_parser().parse_args(argv)
 
+    if not llm_cfg.enabled or llm_cfg.provider != "gemini":
+        raise SystemExit(
+            "Chat requires Gemini to be enabled.\n"
+            "Set in `.env` (or your shell):\n"
+            "  LLM_ENABLED=true\n"
+            "  LLM_PROVIDER=gemini\n"
+            "And ensure `GEMINI_API_KEY` is set."
+        )
+
     if args.no_color:
         _COLOR_ENABLED = False
 
@@ -394,7 +774,16 @@ def main(argv: list[str] | None = None) -> int:
         broker = IBKRBroker(cfg.ibkr, require_paper=True)
 
     effective_model = llm_cfg.normalized_gemini_model()
-    client = GeminiClient(api_key=llm_cfg.gemini_api_key or "", model=effective_model)
+    client: LLMClient
+    if llm_cfg.gemini_prefer_sdk:
+        try:
+            from trading_algo.llm.gemini_sdk import GeminiSDKClient
+
+            client = GeminiSDKClient(api_key=llm_cfg.gemini_api_key or "", model=effective_model)
+        except Exception:
+            client = GeminiClient(api_key=llm_cfg.gemini_api_key or "", model=effective_model)
+    else:
+        client = GeminiClient(api_key=llm_cfg.gemini_api_key or "", model=effective_model)
 
     if args.quiet_ibkr_logs:
         logging.getLogger("ib_insync").setLevel(logging.WARNING)
@@ -697,6 +1086,7 @@ class _PlainUI(_UIBase):
         print(f"confirm_token_provided={confirm_token} (--confirm-token)")
         allowed = sorted(llm_cfg.allowed_symbols())
         print(f"allowed_symbols={','.join(allowed) if allowed else 'ALL'}")
+        print(f"enforce_allowlist={bool(getattr(llm_cfg, 'enforce_allowlist', False))} (LLM_ENFORCE_ALLOWLIST)")
         print(f"google_search={llm_cfg.gemini_use_google_search} (LLM_USE_GOOGLE_SEARCH)")
         print(f"model={model} (GEMINI_MODEL)")
 

@@ -104,6 +104,18 @@ class _FakeForex:
         self.pair = pair
 
 
+class _FakeOption:
+    def __init__(self, symbol, expiry, strike, right, exchange, currency=None):
+        self.kind = "OPT"
+        self.symbol = symbol
+        self.lastTradeDateOrContractMonth = expiry
+        self.strike = strike
+        self.right = right
+        self.exchange = exchange
+        self.currency = currency
+        self.multiplier = None
+
+
 class _FakeMarketOrder:
     def __init__(self, side, qty, tif=None):
         self.side = side
@@ -155,6 +167,7 @@ class TestIBKRAdapterUnit(unittest.TestCase):
             IB=_FakeIB,
             Stock=_FakeStock,
             Future=_FakeFuture,
+            Option=_FakeOption,
             Forex=_FakeForex,
             MarketOrder=_FakeMarketOrder,
             LimitOrder=_FakeLimitOrder,
@@ -203,6 +216,24 @@ class TestIBKRAdapterUnit(unittest.TestCase):
         _, fx_contract = broker._ib.calls[-3]  # qualify
         self.assertEqual(fx_contract.kind, "FX")
         self.assertEqual(fx_contract.pair, "EURUSD")
+
+    def test_contract_mapping_option(self):
+        broker = self._make_broker()
+        opt_req = OrderRequest(
+            instrument=InstrumentSpec(kind="OPT", symbol="AAPL", expiry="20260116", right="C", strike=200),
+            side="BUY",
+            quantity=1,
+            order_type="MKT",
+        )
+        broker.place_order(opt_req)
+        _, opt_contract = broker._ib.calls[-3]  # qualify
+        self.assertEqual(opt_contract.kind, "OPT")
+        self.assertEqual(opt_contract.symbol, "AAPL")
+        self.assertEqual(opt_contract.lastTradeDateOrContractMonth, "20260116")
+        self.assertEqual(opt_contract.right, "C")
+        self.assertEqual(opt_contract.strike, 200.0)
+        self.assertEqual(opt_contract.exchange, "SMART")
+        self.assertEqual(opt_contract.currency, "USD")
 
     def test_snapshot_calls_req_mkt_data(self):
         broker = self._make_broker()

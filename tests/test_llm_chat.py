@@ -32,8 +32,9 @@ class _FakeLLM(LLMClient):
         system: str | None = None,
         tools: list[dict[str, object]] | None = None,
         use_google_search: bool = False,
+        cached_content: str | None = None,
     ) -> dict[str, object]:
-        _ = (contents, system, tools, use_google_search)
+        _ = (contents, system, tools, use_google_search, cached_content)
         if not self._outputs:
             return {"candidates": [{"content": {"role": "model", "parts": [{"text": ""}]}}]}
         return self._outputs.pop(0)
@@ -45,12 +46,25 @@ class _FakeLLM(LLMClient):
         system: str | None = None,
         tools: list[dict[str, object]] | None = None,
         use_google_search: bool = False,
+        cached_content: str | None = None,
     ):
-        _ = (contents, system, tools, use_google_search)
+        _ = (contents, system, tools, use_google_search, cached_content)
         if not self._outputs:
             return
         # Not used in these tests (stream=False).
         yield self._outputs.pop(0)
+
+    def count_tokens(
+        self,
+        *,
+        contents: list[dict[str, object]],
+        system: str | None = None,
+        tools: list[dict[str, object]] | None = None,
+        use_google_search: bool = False,
+        cached_content: str | None = None,
+    ) -> int:
+        _ = (contents, system, tools, use_google_search, cached_content)
+        return 0
 
 
 class _ExplodingLLM(LLMClient):
@@ -69,8 +83,9 @@ class _ExplodingLLM(LLMClient):
         system: str | None = None,
         tools: list[dict[str, object]] | None = None,
         use_google_search: bool = False,
+        cached_content: str | None = None,
     ) -> dict[str, object]:
-        _ = (contents, system, tools, use_google_search)
+        _ = (contents, system, tools, use_google_search, cached_content)
         raise RuntimeError("HTTP 400 Bad Request")
 
     def stream_generate_content(
@@ -80,8 +95,21 @@ class _ExplodingLLM(LLMClient):
         system: str | None = None,
         tools: list[dict[str, object]] | None = None,
         use_google_search: bool = False,
+        cached_content: str | None = None,
     ):
-        _ = (contents, system, tools, use_google_search)
+        _ = (contents, system, tools, use_google_search, cached_content)
+        raise RuntimeError("HTTP 400 Bad Request")
+
+    def count_tokens(
+        self,
+        *,
+        contents: list[dict[str, object]],
+        system: str | None = None,
+        tools: list[dict[str, object]] | None = None,
+        use_google_search: bool = False,
+        cached_content: str | None = None,
+    ) -> int:
+        _ = (contents, system, tools, use_google_search, cached_content)
         raise RuntimeError("HTTP 400 Bad Request")
 
 
@@ -90,7 +118,7 @@ class TestLLMChatSession(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             db_path = os.path.join(td, "audit.sqlite3")
             cfg = TradingConfig(broker="sim", dry_run=False, db_path=db_path)
-            llm = LLMConfig(enabled=True, provider="gemini", gemini_api_key="x", allowed_symbols_csv="AAPL")
+            llm = LLMConfig(enabled=True, provider="gemini", gemini_api_key="x", allowed_symbols_csv="AAPL", gemini_use_google_search=False)
 
             fake = _FakeLLM(
                 outputs=[
@@ -154,7 +182,14 @@ class TestLLMChatSession(unittest.TestCase):
 
     def test_chat_blocks_disallowed_symbol(self) -> None:
         cfg = TradingConfig(broker="sim", dry_run=False, db_path=None)
-        llm = LLMConfig(enabled=True, provider="gemini", gemini_api_key="x", allowed_symbols_csv="AAPL")
+        llm = LLMConfig(
+            enabled=True,
+            provider="gemini",
+            gemini_api_key="x",
+            allowed_symbols_csv="AAPL",
+            enforce_allowlist=True,
+            gemini_use_google_search=False,
+        )
         fake = _FakeLLM(
             outputs=[
                 {
@@ -216,7 +251,7 @@ class TestLLMChatSession(unittest.TestCase):
 
     def test_chat_handles_model_error_without_raising(self) -> None:
         cfg = TradingConfig(broker="sim", dry_run=False, db_path=None)
-        llm = LLMConfig(enabled=True, provider="gemini", gemini_api_key="x", allowed_symbols_csv="AAPL")
+        llm = LLMConfig(enabled=True, provider="gemini", gemini_api_key="x", allowed_symbols_csv="AAPL", gemini_use_google_search=False)
         broker = SimBroker()
         broker.connect()
         broker.set_market_data(InstrumentSpec(kind="STK", symbol="AAPL"), last=100.0)

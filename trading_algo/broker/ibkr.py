@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import logging
 import socket
 import time
@@ -12,6 +13,9 @@ from trading_algo.broker.base import (
     BracketOrderRequest,
     BracketOrderResult,
     MarketDataSnapshot,
+    NewsArticle,
+    NewsHeadline,
+    NewsProvider,
     OrderRequest,
     OrderResult,
     Position,
@@ -32,6 +36,7 @@ class _Factories:
     IB: Any
     Stock: Any
     Future: Any
+    Option: Any
     Forex: Any
     MarketOrder: Any
     LimitOrder: Any
@@ -54,7 +59,7 @@ def _load_ib_insync_factories() -> _Factories:
         asyncio.set_event_loop(asyncio.new_event_loop())
 
     try:
-        from ib_insync import IB, Forex, Future, LimitOrder, MarketOrder, Stock, StopLimitOrder, StopOrder  # type: ignore
+        from ib_insync import IB, Forex, Future, LimitOrder, MarketOrder, Option, Stock, StopLimitOrder, StopOrder  # type: ignore
     except Exception as exc:  # pragma: no cover
         raise IBKRDependencyError(
             "Failed to import 'ib_insync' (check your environment and installed dependencies)."
@@ -63,6 +68,7 @@ def _load_ib_insync_factories() -> _Factories:
         IB=IB,
         Stock=Stock,
         Future=Future,
+        Option=Option,
         Forex=Forex,
         MarketOrder=MarketOrder,
         LimitOrder=LimitOrder,
@@ -151,6 +157,14 @@ class IBKRBroker:
             return factories.Stock(spec.symbol, spec.exchange, spec.currency)
         if spec.kind == "FUT":
             return factories.Future(spec.symbol, spec.expiry, spec.exchange, currency=spec.currency)
+        if spec.kind == "OPT":
+            c = factories.Option(spec.symbol, spec.expiry, float(spec.strike), str(spec.right), spec.exchange, currency=spec.currency)
+            try:
+                if spec.multiplier:
+                    c.multiplier = str(spec.multiplier)
+            except Exception:
+                pass
+            return c
         if spec.kind == "FX":
             # ib_insync parses 'EURUSD' into base/quote automatically.
             return factories.Forex(spec.symbol)
@@ -523,6 +537,101 @@ class IBKRBroker:
 
         return AccountSnapshot(account=str(account), values=values, timestamp_epoch_s=time.time())
 
+    def list_news_providers(self) -> list[NewsProvider]:
+        """
+        List available news providers for the connected account.
+        """
+        _ensure_thread_event_loop()
+        if self._ib is None:
+            raise RuntimeError("Broker is not connected")
+        try:
+            providers = list(self._ib.reqNewsProviders() or [])
+        except Exception:
+            providers = []
+        out: list[NewsProvider] = []
+        for p in providers:
+            code = str(getattr(p, "code", "")).strip()
+            name = str(getattr(p, "name", "")).strip()
+            if code or name:
+                out.append(NewsProvider(code=code, name=name))
+        return out
+
+    def get_historical_news(
+        self,
+        instrument: InstrumentSpec,
+        *,
+        provider_codes: list[str] | None = None,
+        start_datetime: str | None = None,
+        end_datetime: str | None = None,
+        max_results: int = 25,
+    ) -> list[NewsHeadline]:
+        """
+        Fetch historical news headlines for an instrument.
+
+        Notes:
+        - Some providers require market data/news subscriptions.
+        - Date strings should be in IB formats; we pass through as given.
+        """
+        _ensure_thread_event_loop()
+        if self._ib is None:
+            raise RuntimeError("Broker is not connected")
+
+        instrument = validate_instrument(instrument)
+        contract = self._qualify(self._to_contract(instrument))
+        con_id = int(getattr(contract, "conId", 0))
+        if con_id <= 0:
+            raise RuntimeError("Failed to resolve conId for instrument")
+
+        provider_codes_s = ",".join([str(c).strip() for c in (provider_codes or []) if str(c).strip()])
+        # If the caller does not provide a window, default to the last 7 days to avoid "empty" surprises.
+        if start_datetime is None and end_datetime is None:
+            now = dt.datetime.now(dt.timezone.utc)
+            start = _format_ibkr_dt(now - dt.timedelta(days=7))
+            end = _format_ibkr_dt(now)
+        else:
+            start = "" if start_datetime is None else str(start_datetime)
+            end = "" if end_datetime is None else str(end_datetime)
+        total = int(max(1, min(int(max_results), 300)))
+
+        try:
+            items = list(self._ib.reqHistoricalNews(con_id, provider_codes_s, start, end, total) or [])
+        except Exception as exc:
+            raise RuntimeError(f"Failed to fetch historical news: {exc}") from exc
+
+        out: list[NewsHeadline] = []
+        for it in items:
+            ts = str(getattr(it, "time", "")).strip()
+            prov = str(getattr(it, "providerCode", "")).strip()
+            aid = str(getattr(it, "articleId", "")).strip()
+            head = str(getattr(it, "headline", "")).strip()
+            if aid or head:
+                out.append(NewsHeadline(timestamp=ts, provider_code=prov, article_id=aid, headline=head))
+        return out
+
+    def get_news_article(self, *, provider_code: str, article_id: str, format: str = "TEXT") -> NewsArticle:
+        """
+        Fetch the full news article content.
+        """
+        _ensure_thread_event_loop()
+        if self._ib is None:
+            raise RuntimeError("Broker is not connected")
+
+        prov = str(provider_code).strip()
+        aid = str(article_id).strip()
+        fmt = str(format or "TEXT").strip().upper()
+        if not prov or not aid:
+            raise ValueError("provider_code and article_id are required")
+        if fmt not in {"TEXT", "HTML"}:
+            fmt = "TEXT"
+
+        try:
+            article = self._ib.reqNewsArticle(prov, aid, fmt)
+        except Exception as exc:
+            raise RuntimeError(f"Failed to fetch news article: {exc}") from exc
+
+        text = str(getattr(article, "articleText", "") or "")
+        return NewsArticle(provider_code=prov, article_id=aid, text=text)
+
     def _assert_paper_trading(self) -> None:
         """
         Guard rail: refuse to operate unless the connected session appears to be Paper Trading.
@@ -628,6 +737,14 @@ def _preflight_check_socket(host: str, port: int) -> None:
         ) from exc
 
 
+def _format_ibkr_dt(value: dt.datetime) -> str:
+    """
+    Format a timezone-aware datetime into an IBKR-compatible 'YYYYMMDD HH:MM:SS' string (UTC).
+    """
+    v = value.astimezone(dt.timezone.utc)
+    return v.strftime("%Y%m%d %H:%M:%S")
+
+
 def _contract_to_instrument(contract: Any) -> InstrumentSpec:
     sec_type = str(getattr(contract, "secType", "")).upper()
     symbol = str(getattr(contract, "symbol", "")).upper()
@@ -636,6 +753,27 @@ def _contract_to_instrument(contract: Any) -> InstrumentSpec:
 
     if sec_type == "STK":
         return validate_instrument(InstrumentSpec(kind="STK", symbol=symbol, exchange=exchange or "SMART", currency=currency or "USD"))
+    if sec_type == "OPT":
+        expiry = str(getattr(contract, "lastTradeDateOrContractMonth", "")).strip()
+        right = str(getattr(contract, "right", "")).strip().upper()
+        strike = getattr(contract, "strike", None)
+        try:
+            strike_f = float(strike) if strike is not None else None
+        except Exception:
+            strike_f = None
+        mult = str(getattr(contract, "multiplier", "")).strip() or None
+        return validate_instrument(
+            InstrumentSpec(
+                kind="OPT",
+                symbol=symbol,
+                exchange=exchange or "SMART",
+                currency=currency or "USD",
+                expiry=expiry,
+                right=right,
+                strike=strike_f,
+                multiplier=mult,
+            )
+        )
     if sec_type == "FUT":
         expiry = str(getattr(contract, "lastTradeDateOrContractMonth", "")).strip()
         return validate_instrument(InstrumentSpec(kind="FUT", symbol=symbol, exchange=exchange or "", currency=currency or "USD", expiry=expiry))

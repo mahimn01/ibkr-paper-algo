@@ -35,3 +35,25 @@ class TestInstruments(unittest.TestCase):
         self.assertEqual(spec.kind, "FX")
         self.assertEqual(spec.symbol, "EURUSD")
         self.assertEqual(spec.exchange, "IDEALPRO")
+
+    def test_option_requires_expiry_right_strike(self):
+        with self.assertRaises(ValueError):
+            validate_instrument(InstrumentSpec(kind="OPT", symbol="AAPL"))
+        with self.assertRaises(ValueError):
+            validate_instrument(InstrumentSpec(kind="OPT", symbol="AAPL", expiry="20260116", right="C"))
+        with self.assertRaises(ValueError):
+            validate_instrument(InstrumentSpec(kind="OPT", symbol="AAPL", expiry="20260116", strike=200))
+        with self.assertRaises(ValueError):
+            validate_instrument(InstrumentSpec(kind="OPT", symbol="AAPL", expiry="BAD", right="C", strike=200))
+        with self.assertRaises(ValueError):
+            validate_instrument(InstrumentSpec(kind="OPT", symbol="AAPL", expiry="20260116", right="X", strike=200))
+
+        spec = validate_instrument(InstrumentSpec(kind="OPT", symbol="aapl", expiry="20260116", right="c", strike=200))
+        self.assertEqual(spec.kind, "OPT")
+        self.assertEqual(spec.symbol, "AAPL")
+        self.assertEqual(spec.expiry, "20260116")
+        self.assertEqual(spec.right, "C")
+        self.assertEqual(spec.strike, 200.0)
+        self.assertEqual(spec.exchange, "SMART")
+        self.assertEqual(spec.currency, "USD")
+        self.assertEqual(spec.multiplier, "100")
