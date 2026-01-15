@@ -560,7 +560,8 @@ class AdversarialDetector:
         else:
             base = 0.5
 
-        return round(price / base) * base
+        # Use math.floor with +0.5 for standard rounding (not banker's rounding)
+        return math.floor(price / base + 0.5) * base
 
     def _estimate_momentum_size(self, flow: List[OrderFlowTick]) -> float:
         """Estimate likely size of momentum continuation."""

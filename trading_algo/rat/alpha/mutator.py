@@ -304,16 +304,26 @@ def compute(data):
 
             # Randomize parameters
             params = {}
+            # Parameters that should be integers (used as list indices/counts)
+            int_params = {"lookback", "smoothing", "period", "atr_period"}
             for param_name, (min_val, max_val, default) in template.parameters.items():
                 # Random value within range
-                params[param_name] = self._rng.uniform(min_val, max_val)
+                value = self._rng.uniform(min_val, max_val)
+                # Convert to int if this parameter is used for indexing
+                if param_name in int_params:
+                    value = int(value)
+                params[param_name] = value
 
             # Generate compute function
             code = template.compute_fn_template.format(**params)
 
             # Create callable
             local_ns: Dict[str, Any] = {}
-            exec(code, {"__builtins__": {"sum": sum, "abs": abs, "max": max, "min": min}}, local_ns)
+            safe_builtins = {
+                "sum": sum, "abs": abs, "max": max, "min": min,
+                "len": len, "range": range, "float": float, "int": int,
+            }
+            exec(code, {"__builtins__": safe_builtins}, local_ns)
             compute_fn = local_ns["compute"]
 
             # Generate unique name
