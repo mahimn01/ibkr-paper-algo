@@ -14,6 +14,8 @@ from trading_algo.rat.backtest.backtester import (
     RATBacktester,
     BacktestResult,
     BacktestConfig,
+    run_walk_forward,
+    aggregate_walk_forward_results,
 )
 from trading_algo.rat.backtest.data_loader import (
     DataLoader,
@@ -30,6 +32,8 @@ __all__ = [
     "RATBacktester",
     "BacktestResult",
     "BacktestConfig",
+    "run_walk_forward",
+    "aggregate_walk_forward_results",
     "DataLoader",
     "CSVLoader",
     "YahooLoader",
