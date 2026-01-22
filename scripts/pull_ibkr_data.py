@@ -71,8 +71,8 @@ def pull_data(
             print(f"\nFetching {days} days of {bar_size} data for {symbol}...")
 
             instrument = InstrumentSpec(
+                kind="STK",
                 symbol=symbol,
-                sec_type="STK",
                 exchange="SMART",
                 currency="USD",
             )
