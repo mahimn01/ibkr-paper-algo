@@ -111,7 +111,7 @@ def calculate_volatility_metrics(bars: list[IntradayBar]) -> dict:
 def main():
     parser = argparse.ArgumentParser(description="Day Trading Backtest")
     parser.add_argument("symbols", nargs="+", help="Symbols to backtest")
-    parser.add_argument("--days", type=int, default=1, help="Days of data (default: 1)")
+    parser.add_argument("--days", type=int, default=2, help="Days of data (default: 2)")
     parser.add_argument("--capital", type=float, default=100000, help="Initial capital")
     parser.add_argument("--max-position", type=float, default=10000, help="Max position $")
     parser.add_argument("--conservative", action="store_true", help="Conservative mode")
@@ -120,13 +120,14 @@ def main():
     args = parser.parse_args()
 
     print("=" * 70)
-    print("DAY TRADING BACKTEST - CHAMELEON DAY TRADER")
+    print("DAY TRADING BACKTEST - CHAMELEON DAY TRADER v2")
     print("=" * 70)
     print(f"Symbols:      {', '.join(args.symbols)}")
     print(f"Days:         {args.days}")
     print(f"Capital:      ${args.capital:,.0f}")
     print(f"Max Position: ${args.max_position:,.0f}")
     print(f"Mode:         {'Conservative' if args.conservative else 'Aggressive'}")
+    print(f"Features:     ATR stops, trailing stops, VWAP entries, RSI filters")
     print("=" * 70)
 
     # Connect to IBKR
@@ -196,21 +197,34 @@ def main():
         print("\n" + "=" * 70)
         print("SUMMARY - ALL SYMBOLS")
         print("=" * 70)
-        print(f"{'Symbol':<8} {'Trades':>7} {'Win%':>7} {'P&L':>12} {'Sharpe':>8} {'MaxDD':>8}")
-        print("-" * 60)
+        print(f"{'Symbol':<8} {'Trades':>7} {'Win%':>7} {'P&L':>12} {'PF':>7} {'Sharpe':>8} {'MaxDD':>8}")
+        print("-" * 68)
 
         total_pnl = 0
         total_trades = 0
+        total_tp = 0
+        total_trail = 0
+        total_sl = 0
+        total_rev = 0
+        total_eod = 0
 
         for symbol, res in all_results.items():
+            pf_str = f"{res.profit_factor:.2f}" if res.profit_factor < 100 else "inf"
             print(f"{symbol:<8} {res.num_trades:>7} {res.win_rate*100:>6.1f}% "
-                  f"${res.total_pnl:>+10,.2f} {res.sharpe_ratio:>8.2f} "
+                  f"${res.total_pnl:>+10,.2f} {pf_str:>7} {res.sharpe_ratio:>8.2f} "
                   f"{res.max_drawdown_pct*100:>7.2f}%")
             total_pnl += res.total_pnl
             total_trades += res.num_trades
+            total_tp += res.num_take_profit_exits
+            total_trail += res.num_trailing_stop_exits
+            total_sl += res.num_stop_loss_exits
+            total_rev += res.num_reversal_exits
+            total_eod += res.num_eod_exits
 
-        print("-" * 60)
+        print("-" * 68)
         print(f"{'TOTAL':<8} {total_trades:>7} {'':>7} ${total_pnl:>+10,.2f}")
+        print()
+        print(f"EXIT TYPES: TP={total_tp}  Trail={total_trail}  SL={total_sl}  Rev={total_rev}  EOD={total_eod}")
         print("=" * 70)
 
 

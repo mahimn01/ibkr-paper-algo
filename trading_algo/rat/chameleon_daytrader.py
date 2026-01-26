@@ -1,11 +1,15 @@
 """
-Chameleon Day Trader - Aggressive Intraday Trading
+Chameleon Day Trader v2 - Improved Intraday Trading
 
-A more aggressive version of the Chameleon Strategy optimized for day trading:
-- Fast regime detection (5/15/30 bar lookbacks on 5-min data)
-- Lower entry thresholds (more trades)
-- Momentum-based entries
-- Intraday risk management
+Major improvements over v1:
+- ATR-based adaptive stops (adjusts to each stock's volatility)
+- Trailing stop mechanism (locks in profits as trade moves favorably)
+- Momentum exhaustion filter (avoids chasing RSI extremes)
+- Cooldown after stop-loss exits (prevents revenge trading)
+- Stronger momentum reversal confirmation (reduces whipsaw exits)
+- Mean-reversion signals in choppy modes (not blind entries)
+- Time-of-day awareness (avoids open/close chaos)
+- VWAP-relative entries (only buy below VWAP, short above in choppy)
 
 For use with 5-minute bars during market hours.
 """
@@ -15,7 +19,7 @@ from __future__ import annotations
 import math
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time
 from enum import Enum, auto
 from typing import Deque, Dict, List, Optional, Tuple
 
@@ -111,7 +115,20 @@ class FastMomentumAnalyzer:
         above_medium = current_price > medium_sma
         above_slow = current_price > slow_sma
 
-        # Volatility (ATR-like)
+        # ATR calculation (14-period, or available bars)
+        atr_period = min(14, len(highs) - 1)
+        tr_values = []
+        for i in range(-atr_period, 0):
+            tr = max(
+                highs[i] - lows[i],
+                abs(highs[i] - prices[i - 1]),
+                abs(lows[i] - prices[i - 1]),
+            )
+            tr_values.append(tr)
+        atr = sum(tr_values) / len(tr_values) if tr_values else 0
+        atr_pct = atr / current_price if current_price > 0 else 0
+
+        # Volatility (bar range based)
         recent_ranges = [highs[i] - lows[i] for i in range(-self.fast_period, 0)]
         avg_range = sum(recent_ranges) / len(recent_ranges)
         volatility = avg_range / current_price  # As percentage
@@ -121,14 +138,22 @@ class FastMomentumAnalyzer:
         older_volume = sum(volumes[-self.medium_period:-self.fast_period]) / (self.medium_period - self.fast_period)
         volume_surge = recent_volume / older_volume if older_volume > 0 else 1.0
 
+        # VWAP approximation (cumulative volume-weighted average)
+        vwap_prices = prices[-self.slow_period:]
+        vwap_volumes = volumes[-self.slow_period:]
+        total_vol_price = sum(p * v for p, v in zip(vwap_prices, vwap_volumes))
+        total_vol = sum(vwap_volumes)
+        vwap = total_vol_price / total_vol if total_vol > 0 else current_price
+
         # Trend strength (are all timeframes aligned?)
         bullish_alignment = sum([above_fast, above_medium, above_slow])
         bearish_alignment = sum([not above_fast, not above_medium, not above_slow])
 
-        # RSI-like momentum
+        # RSI (14-period)
+        rsi_period = min(14, len(prices) - 1)
         gains = []
         losses = []
-        for i in range(-self.medium_period + 1, 0):
+        for i in range(-rsi_period, 0):
             change = prices[i] - prices[i - 1]
             if change > 0:
                 gains.append(change)
@@ -142,6 +167,31 @@ class FastMomentumAnalyzer:
         rs = avg_gain / avg_loss
         rsi = 100 - (100 / (1 + rs))
 
+        # Rate of change of RSI (is RSI accelerating or decelerating?)
+        # Calculate RSI from 5 bars ago to detect RSI trend
+        if len(prices) > rsi_period + 5:
+            old_gains = []
+            old_losses = []
+            offset = 5
+            for i in range(-rsi_period - offset, -offset):
+                change = prices[i] - prices[i - 1]
+                if change > 0:
+                    old_gains.append(change)
+                    old_losses.append(0)
+                else:
+                    old_gains.append(0)
+                    old_losses.append(abs(change))
+            old_avg_gain = sum(old_gains) / len(old_gains) if old_gains else 0
+            old_avg_loss = sum(old_losses) / len(old_losses) if old_losses else 0.0001
+            old_rs = old_avg_gain / old_avg_loss
+            old_rsi = 100 - (100 / (1 + old_rs))
+            rsi_slope = rsi - old_rsi
+        else:
+            rsi_slope = 0
+
+        # Price distance from VWAP (positive = above, negative = below)
+        vwap_distance = (current_price - vwap) / vwap if vwap > 0 else 0
+
         return {
             'fast_return': fast_return,
             'medium_return': medium_return,
@@ -154,6 +204,11 @@ class FastMomentumAnalyzer:
             'volatility': volatility,
             'volume_surge': volume_surge,
             'rsi': rsi,
+            'rsi_slope': rsi_slope,
+            'atr': atr,
+            'atr_pct': atr_pct,
+            'vwap': vwap,
+            'vwap_distance': vwap_distance,
             'current_price': current_price,
             'fast_sma': fast_sma,
             'medium_sma': medium_sma,
@@ -163,24 +218,35 @@ class FastMomentumAnalyzer:
 
 class ChameleonDayTrader:
     """
-    Aggressive day trading strategy.
+    Day trading strategy v2 with adaptive risk management.
 
-    Key features:
-    - Fast regime detection using momentum
-    - Low entry thresholds (more trades)
-    - Momentum chasing with volume confirmation
-    - Tight stop losses for risk management
-    - Takes profits quickly
+    Key improvements over v1:
+    - ATR-based stops adapt to each stock's volatility
+    - Trailing stops lock in profits
+    - Momentum exhaustion filter avoids chasing
+    - Cooldown prevents revenge trading after stops
+    - Stronger reversal confirmation reduces whipsaws
+    - Mean-reversion in choppy modes, not blind entries
+    - Time-of-day awareness
     """
+
+    # Market hours (Eastern)
+    MARKET_OPEN = time(9, 30)
+    AVOID_OPEN_UNTIL = time(9, 50)     # Skip first 20 min
+    AVOID_CLOSE_AFTER = time(15, 45)   # Skip last 15 min
+    MARKET_CLOSE = time(16, 0)
 
     def __init__(
         self,
         position_pct: float = 0.02,         # 2% of account per trade
         max_position_pct: float = 0.05,     # 5% max for strong signals
         max_position_dollars: float = 10000,  # Hard cap at $10k per position
-        stop_loss_pct: float = 0.005,       # 0.5% stop loss (tight for day trading)
-        take_profit_pct: float = 0.01,      # 1% take profit
-        min_volume_surge: float = 1.2,      # 20% volume increase to confirm
+        atr_stop_multiplier: float = 2.0,   # Stop = 2x ATR from entry
+        atr_target_multiplier: float = 3.0, # Target = 3x ATR from entry (1.5:1 R:R)
+        trailing_stop_activation: float = 1.5,  # Activate trailing after 1.5x ATR profit
+        trailing_stop_distance: float = 1.0,    # Trail at 1x ATR distance
+        min_volume_surge: float = 1.3,      # 30% volume increase to confirm
+        cooldown_bars: int = 6,             # 30 min cooldown after stop-loss
     ):
         self.analyzer = FastMomentumAnalyzer()
 
@@ -189,18 +255,27 @@ class ChameleonDayTrader:
         self.max_position_pct = max_position_pct
         self.max_position_dollars = max_position_dollars
 
-        # Risk management
-        self.stop_loss_pct = stop_loss_pct
-        self.take_profit_pct = take_profit_pct
+        # ATR-based risk management
+        self.atr_stop_mult = atr_stop_multiplier
+        self.atr_target_mult = atr_target_multiplier
+        self.trailing_activation = trailing_stop_activation
+        self.trailing_distance = trailing_stop_distance
+
+        # Entry filters
         self.min_volume_surge = min_volume_surge
+        self.cooldown_bars = cooldown_bars
 
         # State
         self.positions: Dict[str, dict] = {}
         self._current_mode: Dict[str, DayTradeMode] = {}
+        self._cooldown_until: Dict[str, int] = {}  # symbol -> bar count when cooldown ends
+        self._bar_count: int = 0
 
     def clear_positions(self):
         """Clear all positions (call after warmup)."""
         self.positions.clear()
+        self._cooldown_until.clear()
+        self._bar_count = 0
 
     def update(
         self,
@@ -213,6 +288,7 @@ class ChameleonDayTrader:
         volume: float,
     ) -> Optional[DayTradeSignal]:
         """Process new bar and generate trading signal."""
+        self._bar_count += 1
 
         # Update analyzer
         self.analyzer.update(symbol, close, high, low, volume)
@@ -231,6 +307,8 @@ class ChameleonDayTrader:
             symbol=symbol,
             timestamp=timestamp,
             price=close,
+            high=high,
+            low=low,
             signals=signals,
             mode=mode,
         )
@@ -272,11 +350,32 @@ class ChameleonDayTrader:
 
         return DayTradeMode.NEUTRAL
 
+    def _is_in_cooldown(self, symbol: str) -> bool:
+        """Check if symbol is in cooldown after a stop-loss."""
+        if symbol in self._cooldown_until:
+            if self._bar_count < self._cooldown_until[symbol]:
+                return True
+            else:
+                del self._cooldown_until[symbol]
+        return False
+
+    def _is_tradeable_time(self, timestamp: datetime) -> bool:
+        """Check if current time is suitable for new entries."""
+        t = timestamp.time()
+        # Avoid the opening chaos and closing rush
+        if t < self.AVOID_OPEN_UNTIL:
+            return False
+        if t >= self.AVOID_CLOSE_AFTER:
+            return False
+        return True
+
     def _generate_signal(
         self,
         symbol: str,
         timestamp: datetime,
         price: float,
+        high: float,
+        low: float,
         signals: Dict,
         mode: DayTradeMode,
     ) -> DayTradeSignal:
@@ -287,7 +386,7 @@ class ChameleonDayTrader:
 
         # Check existing position for exit
         if has_position:
-            return self._check_exit(symbol, timestamp, price, signals, mode, position)
+            return self._check_exit(symbol, timestamp, price, high, low, signals, mode, position)
 
         # No position - check for entry
         return self._check_entry(symbol, timestamp, price, signals, mode)
@@ -300,230 +399,219 @@ class ChameleonDayTrader:
         signals: Dict,
         mode: DayTradeMode,
     ) -> DayTradeSignal:
-        """Check for entry opportunities."""
+        """Check for entry opportunities with improved filters."""
 
         volume_confirmed = signals['volume_surge'] >= self.min_volume_surge
         rsi = signals['rsi']
+        rsi_slope = signals['rsi_slope']
+        atr = signals['atr']
+        vwap_dist = signals['vwap_distance']
 
-        # LONG entries
+        # No entries during cooldown
+        if self._is_in_cooldown(symbol):
+            return self._hold_signal(symbol, timestamp, price, mode, "In cooldown")
+
+        # No entries during opening/closing periods
+        if not self._is_tradeable_time(timestamp):
+            return self._hold_signal(symbol, timestamp, price, mode, "Outside trading window")
+
+        # No entries during volatility spikes
+        if mode == DayTradeMode.VOLATILITY_SPIKE:
+            return self._hold_signal(symbol, timestamp, price, mode, "Volatility spike - sitting out")
+
+        # ATR must be meaningful (avoids trading stale/illiquid periods)
+        if atr <= 0:
+            return self._hold_signal(symbol, timestamp, price, mode, "No ATR data")
+
+        # === LONG ENTRIES ===
+
         if mode == DayTradeMode.STRONG_MOMENTUM_UP:
-            # Strong momentum - enter aggressively
+            # Momentum exhaustion filter: reject if RSI already extreme
+            if rsi > 75:
+                return self._hold_signal(symbol, timestamp, price, mode,
+                                         f"Momentum exhausted RSI={rsi:.0f}")
+            # Require RSI still rising (momentum not stalling)
+            if rsi_slope < -5:
+                return self._hold_signal(symbol, timestamp, price, mode,
+                                         f"RSI decelerating slope={rsi_slope:.1f}")
+
             size_pct = self.max_position_pct if volume_confirmed else self.position_pct
-            stop = price * (1 - self.stop_loss_pct * 2)  # Wider stop for momentum
-            take_profit = price * (1 + self.take_profit_pct * 2)
+            stop = price - atr * self.atr_stop_mult * 1.5  # Wider for strong momentum
+            take_profit = price + atr * self.atr_target_mult * 1.5
 
-            self.positions[symbol] = {
-                'direction': 1,
-                'entry_price': price,
-                'entry_time': timestamp,
-                'stop_loss': stop,
-                'take_profit': take_profit,
-            }
-
-            return DayTradeSignal(
-                symbol=symbol,
-                timestamp=timestamp,
-                action='buy',
-                size=size_pct,
-                mode=mode,
+            return self._enter_position(
+                symbol, timestamp, price, 1, size_pct, stop, take_profit, mode, atr,
                 confidence=0.8 if volume_confirmed else 0.6,
-                entry_price=price,
-                stop_loss=stop,
-                take_profit=take_profit,
-                reason=f"Strong momentum UP, RSI={rsi:.0f}, Vol surge={signals['volume_surge']:.1f}x",
+                reason=f"Strong UP, RSI={rsi:.0f}, slope={rsi_slope:+.1f}, vol={signals['volume_surge']:.1f}x",
             )
 
-        elif mode == DayTradeMode.MOMENTUM_UP and rsi < 70:
-            # Regular momentum - moderate position
+        elif mode == DayTradeMode.MOMENTUM_UP:
+            # Exhaustion filter
+            if rsi > 70:
+                return self._hold_signal(symbol, timestamp, price, mode,
+                                         f"Overbought RSI={rsi:.0f}")
+
             size_pct = self.position_pct
-            stop = price * (1 - self.stop_loss_pct)
-            take_profit = price * (1 + self.take_profit_pct)
+            stop = price - atr * self.atr_stop_mult
+            take_profit = price + atr * self.atr_target_mult
 
-            self.positions[symbol] = {
-                'direction': 1,
-                'entry_price': price,
-                'entry_time': timestamp,
-                'stop_loss': stop,
-                'take_profit': take_profit,
-            }
-
-            return DayTradeSignal(
-                symbol=symbol,
-                timestamp=timestamp,
-                action='buy',
-                size=size_pct,
-                mode=mode,
+            return self._enter_position(
+                symbol, timestamp, price, 1, size_pct, stop, take_profit, mode, atr,
                 confidence=0.6,
-                entry_price=price,
-                stop_loss=stop,
-                take_profit=take_profit,
                 reason=f"Momentum UP, RSI={rsi:.0f}",
             )
 
-        # SHORT entries
+        # === SHORT ENTRIES ===
+
         elif mode == DayTradeMode.STRONG_MOMENTUM_DOWN:
+            # Momentum exhaustion filter for shorts
+            if rsi < 25:
+                return self._hold_signal(symbol, timestamp, price, mode,
+                                         f"Momentum exhausted RSI={rsi:.0f}")
+            if rsi_slope > 5:
+                return self._hold_signal(symbol, timestamp, price, mode,
+                                         f"RSI recovering slope={rsi_slope:.1f}")
+
             size_pct = self.max_position_pct if volume_confirmed else self.position_pct
-            stop = price * (1 + self.stop_loss_pct * 2)
-            take_profit = price * (1 - self.take_profit_pct * 2)
+            stop = price + atr * self.atr_stop_mult * 1.5
+            take_profit = price - atr * self.atr_target_mult * 1.5
 
-            self.positions[symbol] = {
-                'direction': -1,
-                'entry_price': price,
-                'entry_time': timestamp,
-                'stop_loss': stop,
-                'take_profit': take_profit,
-            }
-
-            return DayTradeSignal(
-                symbol=symbol,
-                timestamp=timestamp,
-                action='short',
-                size=size_pct,
-                mode=mode,
+            return self._enter_position(
+                symbol, timestamp, price, -1, size_pct, stop, take_profit, mode, atr,
                 confidence=0.8 if volume_confirmed else 0.6,
-                entry_price=price,
-                stop_loss=stop,
-                take_profit=take_profit,
-                reason=f"Strong momentum DOWN, RSI={rsi:.0f}, Vol surge={signals['volume_surge']:.1f}x",
+                reason=f"Strong DOWN, RSI={rsi:.0f}, slope={rsi_slope:+.1f}, vol={signals['volume_surge']:.1f}x",
             )
 
-        elif mode == DayTradeMode.MOMENTUM_DOWN and rsi > 30:
+        elif mode == DayTradeMode.MOMENTUM_DOWN:
+            if rsi < 30:
+                return self._hold_signal(symbol, timestamp, price, mode,
+                                         f"Oversold RSI={rsi:.0f}")
+
             size_pct = self.position_pct
-            stop = price * (1 + self.stop_loss_pct)
-            take_profit = price * (1 - self.take_profit_pct)
+            stop = price + atr * self.atr_stop_mult
+            take_profit = price - atr * self.atr_target_mult
 
-            self.positions[symbol] = {
-                'direction': -1,
-                'entry_price': price,
-                'entry_time': timestamp,
-                'stop_loss': stop,
-                'take_profit': take_profit,
-            }
-
-            return DayTradeSignal(
-                symbol=symbol,
-                timestamp=timestamp,
-                action='short',
-                size=size_pct,
-                mode=mode,
+            return self._enter_position(
+                symbol, timestamp, price, -1, size_pct, stop, take_profit, mode, atr,
                 confidence=0.6,
-                entry_price=price,
-                stop_loss=stop,
-                take_profit=take_profit,
                 reason=f"Momentum DOWN, RSI={rsi:.0f}",
             )
 
-        # CHOPPY_BULLISH - ALWAYS BUY (MAXIMUM AGGRESSION)
+        # === CHOPPY MODE - MEAN REVERSION ENTRIES ===
+
         elif mode == DayTradeMode.CHOPPY_BULLISH:
-            size_pct = self.position_pct * 0.75
-            stop = price * (1 - self.stop_loss_pct * 1.5)
-            take_profit = price * (1 + self.take_profit_pct * 0.75)
+            # Mean reversion: only buy on pullbacks BELOW VWAP with RSI dip
+            if vwap_dist < -0.001 and rsi < 45 and rsi_slope > 0:
+                # Price below VWAP, RSI was low but turning up = mean reversion buy
+                size_pct = self.position_pct * 0.75
+                stop = price - atr * self.atr_stop_mult
+                take_profit = price + atr * self.atr_target_mult * 0.75
 
-            self.positions[symbol] = {
-                'direction': 1,
-                'entry_price': price,
-                'entry_time': timestamp,
-                'stop_loss': stop,
-                'take_profit': take_profit,
-            }
+                return self._enter_position(
+                    symbol, timestamp, price, 1, size_pct, stop, take_profit, mode, atr,
+                    confidence=0.5,
+                    reason=f"Mean-rev BUY: VWAP dist={vwap_dist*100:.2f}%, RSI={rsi:.0f} turning up",
+                )
 
-            return DayTradeSignal(
-                symbol=symbol,
-                timestamp=timestamp,
-                action='buy',
-                size=size_pct,
-                mode=mode,
-                confidence=0.5,
-                entry_price=price,
-                stop_loss=stop,
-                take_profit=take_profit,
-                reason=f"Bullish bias LONG, RSI={rsi:.0f}",
-            )
+            return self._hold_signal(symbol, timestamp, price, mode,
+                                     "Choppy bullish - waiting for pullback")
 
-        # CHOPPY_BEARISH - ALWAYS SHORT (MAXIMUM AGGRESSION)
         elif mode == DayTradeMode.CHOPPY_BEARISH:
-            size_pct = self.position_pct * 0.75
-            stop = price * (1 + self.stop_loss_pct * 1.5)
-            take_profit = price * (1 - self.take_profit_pct * 0.75)
+            # Mean reversion: only short on rallies ABOVE VWAP with RSI peak
+            if vwap_dist > 0.001 and rsi > 55 and rsi_slope < 0:
+                size_pct = self.position_pct * 0.75
+                stop = price + atr * self.atr_stop_mult
+                take_profit = price - atr * self.atr_target_mult * 0.75
 
-            self.positions[symbol] = {
-                'direction': -1,
-                'entry_price': price,
-                'entry_time': timestamp,
-                'stop_loss': stop,
-                'take_profit': take_profit,
-            }
+                return self._enter_position(
+                    symbol, timestamp, price, -1, size_pct, stop, take_profit, mode, atr,
+                    confidence=0.5,
+                    reason=f"Mean-rev SHORT: VWAP dist={vwap_dist*100:.2f}%, RSI={rsi:.0f} turning down",
+                )
 
-            return DayTradeSignal(
-                symbol=symbol,
-                timestamp=timestamp,
-                action='short',
-                size=size_pct,
-                mode=mode,
-                confidence=0.5,
-                entry_price=price,
-                stop_loss=stop,
-                take_profit=take_profit,
-                reason=f"Bearish bias SHORT, RSI={rsi:.0f}",
-            )
+            return self._hold_signal(symbol, timestamp, price, mode,
+                                     "Choppy bearish - waiting for rally")
 
-        # NEUTRAL mode - trade based on micro momentum (SUPER AGGRESSIVE)
+        # === NEUTRAL - SCALP ONLY ON STRONG MICRO SIGNALS ===
+
         elif mode == DayTradeMode.NEUTRAL:
             fast_ret = signals['fast_return']
-            # Tiny positive momentum - go long
-            if fast_ret > 0.0005 and rsi < 60:
+
+            # Require stronger micro-momentum + volume confirmation
+            if fast_ret > 0.001 and rsi < 55 and volume_confirmed:
                 size_pct = self.position_pct * 0.5
-                stop = price * (1 - self.stop_loss_pct)
-                take_profit = price * (1 + self.take_profit_pct * 0.5)
+                stop = price - atr * self.atr_stop_mult * 0.75
+                take_profit = price + atr * self.atr_target_mult * 0.5
 
-                self.positions[symbol] = {
-                    'direction': 1,
-                    'entry_price': price,
-                    'entry_time': timestamp,
-                    'stop_loss': stop,
-                    'take_profit': take_profit,
-                }
-
-                return DayTradeSignal(
-                    symbol=symbol,
-                    timestamp=timestamp,
-                    action='buy',
-                    size=size_pct,
-                    mode=mode,
+                return self._enter_position(
+                    symbol, timestamp, price, 1, size_pct, stop, take_profit, mode, atr,
                     confidence=0.35,
-                    entry_price=price,
-                    stop_loss=stop,
-                    take_profit=take_profit,
-                    reason=f"Micro momentum long, RSI={rsi:.0f}, ret={fast_ret*100:.2f}%",
+                    reason=f"Micro long, RSI={rsi:.0f}, ret={fast_ret*100:.2f}%, vol confirmed",
                 )
-            # Tiny negative momentum - go short
-            elif fast_ret < -0.0005 and rsi > 40:
+
+            elif fast_ret < -0.001 and rsi > 45 and volume_confirmed:
                 size_pct = self.position_pct * 0.5
-                stop = price * (1 + self.stop_loss_pct)
-                take_profit = price * (1 - self.take_profit_pct * 0.5)
+                stop = price + atr * self.atr_stop_mult * 0.75
+                take_profit = price - atr * self.atr_target_mult * 0.5
 
-                self.positions[symbol] = {
-                    'direction': -1,
-                    'entry_price': price,
-                    'entry_time': timestamp,
-                    'stop_loss': stop,
-                    'take_profit': take_profit,
-                }
-
-                return DayTradeSignal(
-                    symbol=symbol,
-                    timestamp=timestamp,
-                    action='short',
-                    size=size_pct,
-                    mode=mode,
+                return self._enter_position(
+                    symbol, timestamp, price, -1, size_pct, stop, take_profit, mode, atr,
                     confidence=0.35,
-                    entry_price=price,
-                    stop_loss=stop,
-                    take_profit=take_profit,
-                    reason=f"Micro momentum short, RSI={rsi:.0f}, ret={fast_ret*100:.2f}%",
+                    reason=f"Micro short, RSI={rsi:.0f}, ret={fast_ret*100:.2f}%, vol confirmed",
                 )
 
         # No entry
+        return self._hold_signal(symbol, timestamp, price, mode, "No entry signal")
+
+    def _enter_position(
+        self,
+        symbol: str,
+        timestamp: datetime,
+        price: float,
+        direction: int,
+        size_pct: float,
+        stop: float,
+        take_profit: float,
+        mode: DayTradeMode,
+        atr: float,
+        confidence: float,
+        reason: str,
+    ) -> DayTradeSignal:
+        """Create a position entry."""
+        self.positions[symbol] = {
+            'direction': direction,
+            'entry_price': price,
+            'entry_time': timestamp,
+            'stop_loss': stop,
+            'take_profit': take_profit,
+            'atr_at_entry': atr,
+            'best_price': price,  # Track best price for trailing stop
+            'trailing_active': False,
+        }
+
+        action = 'buy' if direction > 0 else 'short'
+        return DayTradeSignal(
+            symbol=symbol,
+            timestamp=timestamp,
+            action=action,
+            size=size_pct,
+            mode=mode,
+            confidence=confidence,
+            entry_price=price,
+            stop_loss=stop,
+            take_profit=take_profit,
+            reason=reason,
+        )
+
+    def _hold_signal(
+        self,
+        symbol: str,
+        timestamp: datetime,
+        price: float,
+        mode: DayTradeMode,
+        reason: str,
+    ) -> DayTradeSignal:
+        """Return a hold signal."""
         return DayTradeSignal(
             symbol=symbol,
             timestamp=timestamp,
@@ -532,7 +620,7 @@ class ChameleonDayTrader:
             mode=mode,
             confidence=0,
             entry_price=price,
-            reason="No entry signal",
+            reason=reason,
         )
 
     def _check_exit(
@@ -540,56 +628,133 @@ class ChameleonDayTrader:
         symbol: str,
         timestamp: datetime,
         price: float,
+        high: float,
+        low: float,
         signals: Dict,
         mode: DayTradeMode,
         position: dict,
     ) -> DayTradeSignal:
-        """Check for exit signals."""
+        """Check for exit signals with trailing stop and improved reversal logic."""
 
         direction = position['direction']
         entry_price = position['entry_price']
         stop_loss = position['stop_loss']
         take_profit = position['take_profit']
+        atr = position['atr_at_entry']
+        best_price = position['best_price']
 
         action = 'hold'
         reason = ""
 
+        # Update best price for trailing stop
+        if direction > 0:
+            if price > best_price:
+                position['best_price'] = price
+                best_price = price
+        else:
+            if price < best_price:
+                position['best_price'] = price
+                best_price = price
+
+        # Check trailing stop activation
+        if not position['trailing_active']:
+            if direction > 0:
+                profit_distance = best_price - entry_price
+                if profit_distance >= atr * self.trailing_activation:
+                    position['trailing_active'] = True
+                    # Move stop to breakeven + small profit
+                    new_stop = entry_price + atr * 0.5
+                    if new_stop > stop_loss:
+                        position['stop_loss'] = new_stop
+                        stop_loss = new_stop
+            else:
+                profit_distance = entry_price - best_price
+                if profit_distance >= atr * self.trailing_activation:
+                    position['trailing_active'] = True
+                    new_stop = entry_price - atr * 0.5
+                    if new_stop < stop_loss:
+                        position['stop_loss'] = new_stop
+                        stop_loss = new_stop
+
+        # Update trailing stop position
+        if position['trailing_active']:
+            if direction > 0:
+                trailing_stop = best_price - atr * self.trailing_distance
+                if trailing_stop > stop_loss:
+                    position['stop_loss'] = trailing_stop
+                    stop_loss = trailing_stop
+            else:
+                trailing_stop = best_price + atr * self.trailing_distance
+                if trailing_stop < stop_loss:
+                    position['stop_loss'] = trailing_stop
+                    stop_loss = trailing_stop
+
+        # Exit checks
         if direction > 0:  # Long position
-            # Stop loss
-            if price <= stop_loss:
+            # Stop loss (check low of bar for intrabar hit)
+            if low <= stop_loss or price <= stop_loss:
                 action = 'sell'
-                reason = f"Stop loss hit at ${price:.2f}"
+                exit_price = min(price, stop_loss)
+                if position['trailing_active']:
+                    reason = f"Trailing stop hit at ${exit_price:.2f}"
+                else:
+                    reason = f"Stop loss hit at ${exit_price:.2f}"
 
             # Take profit
-            elif price >= take_profit:
+            elif high >= take_profit or price >= take_profit:
                 action = 'sell'
-                reason = f"Take profit hit at ${price:.2f}"
+                reason = f"Take profit hit at ${max(price, take_profit):.2f}"
 
-            # Momentum reversal
-            elif mode in (DayTradeMode.STRONG_MOMENTUM_DOWN, DayTradeMode.MOMENTUM_DOWN):
+            # Momentum reversal - require STRONG confirmation
+            elif (mode == DayTradeMode.STRONG_MOMENTUM_DOWN
+                  and signals['rsi'] < 35
+                  and signals['bearish_alignment'] == 3):
                 action = 'sell'
-                reason = f"Momentum reversed to {mode.name}"
+                reason = f"Strong reversal: mode={mode.name}, RSI={signals['rsi']:.0f}"
+
+            # End of day - close all positions
+            elif timestamp.time() >= self.MARKET_CLOSE:
+                action = 'sell'
+                reason = "End of day close"
 
         else:  # Short position
             # Stop loss
-            if price >= stop_loss:
+            if high >= stop_loss or price >= stop_loss:
                 action = 'cover'
-                reason = f"Stop loss hit at ${price:.2f}"
+                exit_price = max(price, stop_loss)
+                if position['trailing_active']:
+                    reason = f"Trailing stop hit at ${exit_price:.2f}"
+                else:
+                    reason = f"Stop loss hit at ${exit_price:.2f}"
 
             # Take profit
-            elif price <= take_profit:
+            elif low <= take_profit or price <= take_profit:
                 action = 'cover'
-                reason = f"Take profit hit at ${price:.2f}"
+                reason = f"Take profit hit at ${min(price, take_profit):.2f}"
 
-            # Momentum reversal
-            elif mode in (DayTradeMode.STRONG_MOMENTUM_UP, DayTradeMode.MOMENTUM_UP):
+            # Momentum reversal - require STRONG confirmation
+            elif (mode == DayTradeMode.STRONG_MOMENTUM_UP
+                  and signals['rsi'] > 65
+                  and signals['bullish_alignment'] == 3):
                 action = 'cover'
-                reason = f"Momentum reversed to {mode.name}"
+                reason = f"Strong reversal: mode={mode.name}, RSI={signals['rsi']:.0f}"
+
+            # End of day
+            elif timestamp.time() >= self.MARKET_CLOSE:
+                action = 'cover'
+                reason = "End of day close"
 
         if action in ('sell', 'cover'):
             pnl = (price - entry_price) * direction
             pnl_pct = pnl / entry_price * 100
+            is_stop_loss = "Stop loss" in reason
+
             del self.positions[symbol]
+
+            # Set cooldown if stopped out
+            if is_stop_loss and not position['trailing_active']:
+                self._cooldown_until[symbol] = self._bar_count + self.cooldown_bars
+
             reason += f" | P&L: {pnl_pct:+.2f}%"
 
         return DayTradeSignal(
@@ -611,24 +776,30 @@ def create_daytrader(
     """Create a day trader instance.
 
     Args:
-        aggressive: Use aggressive settings (tighter stops, lower thresholds)
+        aggressive: Use aggressive settings (wider targets, lower thresholds)
         max_position_dollars: Hard cap on position size in dollars (default $10k)
     """
     if aggressive:
         return ChameleonDayTrader(
-            position_pct=0.02,         # 2% per trade
-            max_position_pct=0.05,     # 5% for strong signals
+            position_pct=0.02,              # 2% per trade
+            max_position_pct=0.05,          # 5% for strong signals
             max_position_dollars=max_position_dollars,
-            stop_loss_pct=0.005,       # 0.5% stop
-            take_profit_pct=0.01,      # 1% take profit
-            min_volume_surge=1.1,      # Lower volume threshold
+            atr_stop_multiplier=1.5,        # 1.5x ATR stop
+            atr_target_multiplier=3.0,      # 3x ATR target (2:1 R:R)
+            trailing_stop_activation=1.5,   # Activate trail after 1.5x ATR
+            trailing_stop_distance=1.0,     # Trail 1x ATR behind
+            min_volume_surge=1.2,           # 20% volume increase
+            cooldown_bars=4,                # 20 min cooldown
         )
     else:
         return ChameleonDayTrader(
-            position_pct=0.01,         # 1% per trade
-            max_position_pct=0.03,     # 3% for strong signals
+            position_pct=0.01,              # 1% per trade
+            max_position_pct=0.03,          # 3% for strong signals
             max_position_dollars=max_position_dollars,
-            stop_loss_pct=0.007,
-            take_profit_pct=0.015,
-            min_volume_surge=1.3,
+            atr_stop_multiplier=2.0,        # 2x ATR stop (wider)
+            atr_target_multiplier=3.5,      # 3.5x ATR target
+            trailing_stop_activation=2.0,   # Activate trail after 2x ATR
+            trailing_stop_distance=1.5,     # Trail 1.5x ATR behind
+            min_volume_surge=1.4,           # 40% volume increase
+            cooldown_bars=6,                # 30 min cooldown
         )

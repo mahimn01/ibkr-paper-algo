@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-Aggressive Day Trading with Chameleon Day Trader.
+Chameleon Day Trader v2 - Live Trading.
 
-This is a RISKIER, more aggressive day trading strategy that:
-- Uses fast momentum detection (5/15/30 bar lookbacks)
-- Enters on momentum breakouts with volume confirmation
-- Uses tight stops (0.5%) and quick profit taking (1%)
-- Trades more frequently than the swing trading version
+Features:
+- ATR-based adaptive stops (adjusts to each stock's volatility)
+- Trailing stops (locks in profits as trade moves favorably)
+- Momentum exhaustion filter (avoids chasing RSI extremes)
+- VWAP-relative mean-reversion entries in choppy markets
+- Cooldown after stop-loss exits (prevents revenge trading)
+- Time-of-day awareness (avoids open/close chaos)
 
 Usage:
     # Dry run first!
@@ -15,8 +17,8 @@ Usage:
     # Live trading
     python run_daytrader_live.py AAPL MSFT
 
-    # More aggressive settings
-    python run_daytrader_live.py AAPL MSFT --aggressive
+    # Conservative mode
+    python run_daytrader_live.py AAPL MSFT --conservative
 """
 
 import argparse
@@ -367,12 +369,13 @@ def main():
     aggressive = not args.conservative
 
     print("=" * 70)
-    print("CHAMELEON DAY TRADER - AGGRESSIVE INTRADAY TRADING")
+    print("CHAMELEON DAY TRADER v2 - LIVE TRADING")
     print("=" * 70)
     print(f"Symbols:    {', '.join(args.symbols)}")
     print(f"Interval:   {args.interval} seconds")
     print(f"Mode:       {'AGGRESSIVE' if aggressive else 'CONSERVATIVE'}")
     print(f"Sizing:     {'2-5%' if aggressive else '1-3%'} of account, max ${args.max_position:,.0f}")
+    print(f"Stops:      ATR-based ({'1.5x' if aggressive else '2x'} ATR), trailing after {'1.5x' if aggressive else '2x'} ATR")
     print(f"Dry Run:    {args.dry_run}")
     print()
     print("WARNING: Day trading is risky! Use at your own risk.")

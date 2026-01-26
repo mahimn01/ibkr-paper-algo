@@ -1,7 +1,13 @@
 """
-Intraday Backtester for Day Trading Algorithm.
+Intraday Backtester for Day Trading Algorithm v2.
 
 Backtests the ChameleonDayTrader on 5-minute bar data.
+The trader now handles all exit logic internally (ATR stops, trailing stops,
+time-of-day exits, momentum reversal), so the backtester focuses on:
+- Slippage modeling
+- Commission costs
+- Position sizing with dollar cap
+- Performance metrics
 """
 
 from __future__ import annotations
@@ -85,6 +91,13 @@ class BacktestResult:
     # Regime breakdown
     regime_performance: Dict[str, Dict] = field(default_factory=dict)
 
+    # v2 additions
+    num_trailing_stop_exits: int = 0
+    num_take_profit_exits: int = 0
+    num_stop_loss_exits: int = 0
+    num_reversal_exits: int = 0
+    num_eod_exits: int = 0
+
 
 class IntradayBacktester:
     """
@@ -94,6 +107,9 @@ class IntradayBacktester:
     - Slippage modeling
     - Commission costs
     - Position sizing with dollar cap
+
+    The trader handles all trading logic internally (entry filters,
+    ATR-based stops, trailing stops, cooldowns, time-of-day, reversals).
     """
 
     def __init__(
@@ -140,11 +156,18 @@ class IntradayBacktester:
         equity_curve: List[float] = []
         trades: List[DayTrade] = []
 
-        # Current position tracking
+        # Current position tracking (backtester's own tracking with slippage)
         position: Optional[Dict] = None
 
         # Regime performance tracking
         regime_trades: Dict[str, List[DayTrade]] = {}
+
+        # Exit type counters
+        trailing_exits = 0
+        tp_exits = 0
+        sl_exits = 0
+        reversal_exits = 0
+        eod_exits = 0
 
         for i, bar in enumerate(bars):
             # Update trader with bar
@@ -170,41 +193,16 @@ class IntradayBacktester:
                 continue
 
             # Process signal
-            if signal.action == 'hold':
-                # Check for stop/target hits intrabar
-                if position is not None:
-                    exit_price, exit_reason = self._check_intrabar_exit(
-                        position, bar.high, bar.low
-                    )
-                    if exit_price is not None:
-                        trade = self._close_position(
-                            position, exit_price, bar.timestamp, exit_reason
-                        )
-                        trades.append(trade)
-                        capital += trade.pnl
-
-                        # Track by regime
-                        regime_name = trade.mode_at_entry.name
-                        if regime_name not in regime_trades:
-                            regime_trades[regime_name] = []
-                        regime_trades[regime_name].append(trade)
-
-                        position = None
-                        trader.clear_positions()
-
-            elif signal.action in ('buy', 'short'):
-                # Close existing position if any
+            if signal.action in ('buy', 'short'):
+                # Close existing position if any (shouldn't happen often with v2)
                 if position is not None:
                     trade = self._close_position(
                         position, bar.close, bar.timestamp, "Signal reversal"
                     )
                     trades.append(trade)
                     capital += trade.pnl
-
-                    regime_name = trade.mode_at_entry.name
-                    if regime_name not in regime_trades:
-                        regime_trades[regime_name] = []
-                    regime_trades[regime_name].append(trade)
+                    self._track_regime(regime_trades, trade)
+                    reversal_exits += 1
 
                 # Open new position
                 position = self._open_position(
@@ -223,13 +221,24 @@ class IntradayBacktester:
                     )
                     trades.append(trade)
                     capital += trade.pnl
+                    self._track_regime(regime_trades, trade)
 
-                    regime_name = trade.mode_at_entry.name
-                    if regime_name not in regime_trades:
-                        regime_trades[regime_name] = []
-                    regime_trades[regime_name].append(trade)
+                    # Categorize exit type
+                    reason = signal.reason.lower()
+                    if 'trailing' in reason:
+                        trailing_exits += 1
+                    elif 'take profit' in reason:
+                        tp_exits += 1
+                    elif 'stop loss' in reason:
+                        sl_exits += 1
+                    elif 'reversal' in reason:
+                        reversal_exits += 1
+                    elif 'end of day' in reason:
+                        eod_exits += 1
 
                     position = None
+
+            # 'hold' - do nothing
 
         # Close any remaining position at end
         if position is not None:
@@ -238,20 +247,31 @@ class IntradayBacktester:
             )
             trades.append(trade)
             capital += trade.pnl
-
-            regime_name = trade.mode_at_entry.name
-            if regime_name not in regime_trades:
-                regime_trades[regime_name] = []
-            regime_trades[regime_name].append(trade)
+            self._track_regime(regime_trades, trade)
+            eod_exits += 1
 
         # Calculate metrics
-        return self._calculate_results(
+        result = self._calculate_results(
             symbol=symbol,
             bars=bars,
             trades=trades,
             equity_curve=equity_curve,
             regime_trades=regime_trades,
         )
+        result.num_trailing_stop_exits = trailing_exits
+        result.num_take_profit_exits = tp_exits
+        result.num_stop_loss_exits = sl_exits
+        result.num_reversal_exits = reversal_exits
+        result.num_eod_exits = eod_exits
+
+        return result
+
+    def _track_regime(self, regime_trades: Dict[str, List[DayTrade]], trade: DayTrade):
+        """Track trade under its entry regime."""
+        regime_name = trade.mode_at_entry.name
+        if regime_name not in regime_trades:
+            regime_trades[regime_name] = []
+        regime_trades[regime_name].append(trade)
 
     def _open_position(
         self,
@@ -286,8 +306,6 @@ class IntradayBacktester:
             'entry_price': entry_price,
             'entry_time': timestamp,
             'quantity': quantity,
-            'stop_loss': signal.stop_loss,
-            'take_profit': signal.take_profit,
             'mode': signal.mode,
             'commission_entry': commission,
         }
@@ -339,30 +357,6 @@ class IntradayBacktester:
             exit_reason=reason,
             mode_at_entry=position['mode'],
         )
-
-    def _check_intrabar_exit(
-        self,
-        position: Dict,
-        high: float,
-        low: float,
-    ) -> Tuple[Optional[float], str]:
-        """Check if stop or target was hit within the bar."""
-        direction = position['direction']
-        stop = position['stop_loss']
-        target = position['take_profit']
-
-        if direction > 0:  # Long
-            if stop and low <= stop:
-                return stop, "Stop loss hit"
-            if target and high >= target:
-                return target, "Take profit hit"
-        else:  # Short
-            if stop and high >= stop:
-                return stop, "Stop loss hit"
-            if target and low <= target:
-                return target, "Take profit hit"
-
-        return None, ""
 
     def _calc_unrealized_pnl(self, position: Dict, current_price: float) -> float:
         """Calculate unrealized P&L."""
@@ -529,6 +523,15 @@ def print_backtest_results(result: BacktestResult):
     print(f"  Avg Trade:      ${result.avg_trade:+,.2f}")
     print()
 
+    print("EXIT BREAKDOWN")
+    print("-" * 40)
+    print(f"  Take Profit:    {result.num_take_profit_exits}")
+    print(f"  Trailing Stop:  {result.num_trailing_stop_exits}")
+    print(f"  Stop Loss:      {result.num_stop_loss_exits}")
+    print(f"  Reversal:       {result.num_reversal_exits}")
+    print(f"  End of Day:     {result.num_eod_exits}")
+    print()
+
     print("RISK METRICS")
     print("-" * 40)
     print(f"  Max Drawdown:   ${result.max_drawdown:,.2f} ({result.max_drawdown_pct*100:.2f}%)")
@@ -551,14 +554,16 @@ def print_backtest_results(result: BacktestResult):
     print()
     print("INDIVIDUAL TRADES")
     print("-" * 70)
-    for i, trade in enumerate(result.trades[:20], 1):  # Show first 20
+    for i, trade in enumerate(result.trades[:25], 1):  # Show first 25
         direction = "LONG" if trade.direction > 0 else "SHORT"
-        print(f"  {i:2d}. {trade.entry_time.strftime('%H:%M')} {direction:5s} "
+        # Clean exit reason (remove P&L suffix that trader adds)
+        reason = trade.exit_reason.split(" | P&L")[0] if " | P&L" in trade.exit_reason else trade.exit_reason
+        print(f"  {i:2d}. {trade.entry_time.strftime('%m/%d %H:%M')} {direction:5s} "
               f"${trade.entry_price:.2f} -> ${trade.exit_price:.2f} | "
               f"${trade.pnl:+7.2f} ({trade.pnl_pct*100:+5.2f}%) | {trade.hold_time_minutes:3d}m | "
-              f"{trade.exit_reason[:20]}")
+              f"{reason[:30]}")
 
-    if len(result.trades) > 20:
-        print(f"  ... and {len(result.trades) - 20} more trades")
+    if len(result.trades) > 25:
+        print(f"  ... and {len(result.trades) - 25} more trades")
 
     print("=" * 70)
