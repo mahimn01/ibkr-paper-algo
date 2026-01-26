@@ -233,6 +233,8 @@ class ChameleonDayTrader:
     # Market hours (Eastern)
     MARKET_OPEN = time(9, 30)
     AVOID_OPEN_UNTIL = time(9, 50)     # Skip first 20 min
+    LUNCH_START = time(12, 0)          # Lunch break start
+    LUNCH_END = time(13, 0)            # Lunch break end
     AVOID_CLOSE_AFTER = time(15, 45)   # Skip last 15 min
     MARKET_CLOSE = time(16, 0)
 
@@ -362,9 +364,13 @@ class ChameleonDayTrader:
     def _is_tradeable_time(self, timestamp: datetime) -> bool:
         """Check if current time is suitable for new entries."""
         t = timestamp.time()
-        # Avoid the opening chaos and closing rush
+        # Avoid the opening chaos
         if t < self.AVOID_OPEN_UNTIL:
             return False
+        # Lunch break - low volume, choppy, spreads widen
+        if self.LUNCH_START <= t < self.LUNCH_END:
+            return False
+        # Avoid the closing rush
         if t >= self.AVOID_CLOSE_AFTER:
             return False
         return True
