@@ -16,6 +16,7 @@ from datetime import datetime
 from trading_algo.broker.ibkr import IBKRBroker
 from trading_algo.config import IBKRConfig
 from trading_algo.instruments import InstrumentSpec
+from trading_algo.rat.chameleon_daytrader import MARKET_PRESETS, list_markets
 from trading_algo.rat.daytrader_backtest import (
     IntradayBacktester,
     IntradayBar,
@@ -27,13 +28,15 @@ def pull_intraday_data(
     broker: IBKRBroker,
     symbol: str,
     days: int = 1,
+    exchange: str = "SMART",
+    currency: str = "USD",
 ) -> list[IntradayBar]:
     """Pull 5-minute intraday data from IBKR."""
     instrument = InstrumentSpec(
         kind="STK",
         symbol=symbol,
-        exchange="SMART",
-        currency="USD",
+        exchange=exchange,
+        currency=currency,
     )
 
     print(f"  Pulling {days} day(s) of 5-min data for {symbol}...")
@@ -115,13 +118,23 @@ def main():
     parser.add_argument("--capital", type=float, default=100000, help="Initial capital")
     parser.add_argument("--max-position", type=float, default=10000, help="Max position $")
     parser.add_argument("--conservative", action="store_true", help="Conservative mode")
+    parser.add_argument("--market", type=str, default="NYSE", help="Market preset: NYSE, HKEX, TSE, LSE, ASX")
+    parser.add_argument("--list-markets", action="store_true", help="List available market presets and exit")
     parser.add_argument("--port", type=int, default=7497, help="IBKR port")
 
     args = parser.parse_args()
 
+    if args.list_markets:
+        list_markets()
+        sys.exit(0)
+
+    market_key = args.market.upper()
+    mc = MARKET_PRESETS.get(market_key, MARKET_PRESETS['NYSE'])
+
     print("=" * 70)
     print("DAY TRADING BACKTEST - CHAMELEON DAY TRADER v2")
     print("=" * 70)
+    print(f"Market:       {mc.name} ({market_key}) | {mc.exchange} | {mc.currency}")
     print(f"Symbols:      {', '.join(args.symbols)}")
     print(f"Days:         {args.days}")
     print(f"Capital:      ${args.capital:,.0f}")
@@ -153,7 +166,8 @@ def main():
 
             # Pull data
             try:
-                bars = pull_intraday_data(broker, symbol, days=args.days)
+                bars = pull_intraday_data(broker, symbol, days=args.days,
+                                         exchange=mc.exchange, currency=mc.currency)
             except Exception as e:
                 print(f"  Error pulling data: {e}")
                 continue
@@ -181,6 +195,7 @@ def main():
                 symbol=symbol,
                 aggressive=not args.conservative,
                 warmup_bars=35,
+                market=market_key,
             )
 
             all_results[symbol] = result

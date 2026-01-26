@@ -130,6 +130,7 @@ class IntradayBacktester:
         symbol: str,
         aggressive: bool = True,
         warmup_bars: int = 35,
+        market: str = 'NYSE',
     ) -> BacktestResult:
         """
         Run backtest on intraday bars.
@@ -139,6 +140,7 @@ class IntradayBacktester:
             symbol: Stock symbol
             aggressive: Use aggressive day trader settings
             warmup_bars: Number of bars for warmup (no trading)
+            market: Market preset ('NYSE', 'HKEX', 'TSE', 'LSE', 'ASX')
 
         Returns:
             BacktestResult with all metrics
@@ -150,6 +152,7 @@ class IntradayBacktester:
         trader = create_daytrader(
             aggressive=aggressive,
             max_position_dollars=self.max_position_dollars,
+            market=market,
         )
 
         capital = self.initial_capital

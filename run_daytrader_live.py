@@ -36,7 +36,10 @@ from trading_algo.rat.chameleon_daytrader import (
     ChameleonDayTrader,
     DayTradeMode,
     DayTradeSignal,
+    MarketConfig,
+    MARKET_PRESETS,
     create_daytrader,
+    list_markets,
 )
 
 
@@ -50,17 +53,21 @@ class DayTraderLive:
         aggressive: bool = True,
         dry_run: bool = False,
         max_position_dollars: float = 10000,
+        market: str = 'NYSE',
     ):
         self.broker = broker
         self.symbols = [s.upper() for s in symbols]
         self.dry_run = dry_run
         self.max_position_dollars = max_position_dollars
+        self.market = market.upper()
+        self.market_config = MARKET_PRESETS.get(self.market, MARKET_PRESETS['NYSE'])
 
         # Create day traders (one per symbol)
         self.traders: Dict[str, ChameleonDayTrader] = {
             symbol: create_daytrader(
                 aggressive=aggressive,
                 max_position_dollars=max_position_dollars,
+                market=self.market,
             )
             for symbol in self.symbols
         }
@@ -105,8 +112,8 @@ class DayTraderLive:
                 instrument = InstrumentSpec(
                     kind="STK",
                     symbol=symbol,
-                    exchange="SMART",
-                    currency="USD",
+                    exchange=self.market_config.exchange,
+                    currency=self.market_config.currency,
                 )
 
                 # Get full day of 5-min bars for warmup (need 30+ bars)
@@ -148,8 +155,8 @@ class DayTraderLive:
                 instrument = InstrumentSpec(
                     kind="STK",
                     symbol=symbol,
-                    exchange="SMART",
-                    currency="USD",
+                    exchange=self.market_config.exchange,
+                    currency=self.market_config.currency,
                 )
 
                 # Get latest bars
@@ -232,7 +239,7 @@ class DayTraderLive:
                 print("    [DRY RUN]")
                 return
 
-            instrument = InstrumentSpec(kind="STK", symbol=signal.symbol, exchange="SMART", currency="USD")
+            instrument = InstrumentSpec(kind="STK", symbol=signal.symbol, exchange=self.market_config.exchange, currency=self.market_config.currency)
             order = OrderRequest(
                 instrument=instrument,
                 side="BUY",
@@ -270,7 +277,7 @@ class DayTraderLive:
                 print("    [DRY RUN]")
                 return
 
-            instrument = InstrumentSpec(kind="STK", symbol=signal.symbol, exchange="SMART", currency="USD")
+            instrument = InstrumentSpec(kind="STK", symbol=signal.symbol, exchange=self.market_config.exchange, currency=self.market_config.currency)
             order = OrderRequest(
                 instrument=instrument,
                 side="SELL",
@@ -300,7 +307,7 @@ class DayTraderLive:
             positions = self.broker.get_positions()
             for pos in positions:
                 if pos.instrument.symbol == signal.symbol and pos.quantity > 0:
-                    instrument = InstrumentSpec(kind="STK", symbol=signal.symbol, exchange="SMART", currency="USD")
+                    instrument = InstrumentSpec(kind="STK", symbol=signal.symbol, exchange=self.market_config.exchange, currency=self.market_config.currency)
                     order = OrderRequest(
                         instrument=instrument,
                         side="SELL",
@@ -329,7 +336,7 @@ class DayTraderLive:
             positions = self.broker.get_positions()
             for pos in positions:
                 if pos.instrument.symbol == signal.symbol and pos.quantity < 0:
-                    instrument = InstrumentSpec(kind="STK", symbol=signal.symbol, exchange="SMART", currency="USD")
+                    instrument = InstrumentSpec(kind="STK", symbol=signal.symbol, exchange=self.market_config.exchange, currency=self.market_config.currency)
                     order = OrderRequest(
                         instrument=instrument,
                         side="BUY",
@@ -362,15 +369,27 @@ def main():
     parser.add_argument("--aggressive", action="store_true", default=True, help="Aggressive mode (default)")
     parser.add_argument("--conservative", action="store_true", help="Conservative mode")
     parser.add_argument("--max-position", type=float, default=10000, help="Max position size cap in dollars (default: $10000)")
+    parser.add_argument("--market", type=str, default="NYSE", help="Market preset: NYSE, HKEX, TSE, LSE, ASX")
+    parser.add_argument("--list-markets", action="store_true", help="List available market presets and exit")
     parser.add_argument("--port", type=int, default=7497, help="IBKR port")
 
     args = parser.parse_args()
 
+    if args.list_markets:
+        list_markets()
+        sys.exit(0)
+
     aggressive = not args.conservative
+    market_key = args.market.upper()
+    mc = MARKET_PRESETS.get(market_key, MARKET_PRESETS['NYSE'])
 
     print("=" * 70)
     print("CHAMELEON DAY TRADER v2 - LIVE TRADING")
     print("=" * 70)
+    print(f"Market:     {mc.name} ({market_key}) | {mc.exchange} | {mc.currency}")
+    print(f"Hours:      {mc.market_open.strftime('%H:%M')}-{mc.market_close.strftime('%H:%M')} ({mc.timezone})")
+    if mc.lunch_start:
+        print(f"Lunch:      {mc.lunch_start.strftime('%H:%M')}-{mc.lunch_end.strftime('%H:%M')} (no new entries)")
     print(f"Symbols:    {', '.join(args.symbols)}")
     print(f"Interval:   {args.interval} seconds")
     print(f"Mode:       {'AGGRESSIVE' if aggressive else 'CONSERVATIVE'}")
@@ -399,6 +418,7 @@ def main():
         aggressive=aggressive,
         dry_run=args.dry_run,
         max_position_dollars=args.max_position,
+        market=market_key,
     )
 
     def signal_handler(sig, frame):

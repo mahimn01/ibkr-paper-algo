@@ -10,6 +10,7 @@ Major improvements over v1:
 - Mean-reversion signals in choppy modes (not blind entries)
 - Time-of-day awareness (avoids open/close chaos)
 - VWAP-relative entries (only buy below VWAP, short above in choppy)
+- Multi-market support (NYSE, HKEX, TSE, LSE, ASX)
 
 For use with 5-minute bars during market hours.
 """
@@ -18,10 +19,90 @@ from __future__ import annotations
 
 import math
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, time
 from enum import Enum, auto
 from typing import Deque, Dict, List, Optional, Tuple
+
+
+@dataclass
+class MarketConfig:
+    """Configuration for a specific market/exchange."""
+    name: str
+    exchange: str           # IBKR exchange code
+    currency: str           # Trading currency
+    market_open: time       # Market open
+    avoid_open_until: time  # Skip opening chaos
+    lunch_start: Optional[time]  # Lunch break start (None = no break)
+    lunch_end: Optional[time]    # Lunch break end
+    avoid_close_after: time # Stop new entries before close
+    market_close: time      # Force close all positions
+    timezone: str           # For display purposes
+
+
+# Pre-built market configurations
+MARKET_PRESETS: Dict[str, MarketConfig] = {
+    'NYSE': MarketConfig(
+        name='NYSE / NASDAQ',
+        exchange='SMART',
+        currency='USD',
+        market_open=time(9, 30),
+        avoid_open_until=time(9, 50),
+        lunch_start=time(12, 0),
+        lunch_end=time(13, 0),
+        avoid_close_after=time(15, 45),
+        market_close=time(16, 0),
+        timezone='US/Eastern',
+    ),
+    'HKEX': MarketConfig(
+        name='Hong Kong Stock Exchange',
+        exchange='SEHK',
+        currency='HKD',
+        market_open=time(9, 30),
+        avoid_open_until=time(9, 50),
+        lunch_start=time(12, 0),
+        lunch_end=time(13, 0),
+        avoid_close_after=time(15, 50),
+        market_close=time(16, 0),
+        timezone='Asia/Hong_Kong',
+    ),
+    'TSE': MarketConfig(
+        name='Tokyo Stock Exchange',
+        exchange='TSEJ',
+        currency='JPY',
+        market_open=time(9, 0),
+        avoid_open_until=time(9, 15),
+        lunch_start=time(11, 30),
+        lunch_end=time(12, 30),
+        avoid_close_after=time(14, 50),
+        market_close=time(15, 0),
+        timezone='Asia/Tokyo',
+    ),
+    'LSE': MarketConfig(
+        name='London Stock Exchange',
+        exchange='LSE',
+        currency='GBP',
+        market_open=time(8, 0),
+        avoid_open_until=time(8, 15),
+        lunch_start=None,  # No official lunch break
+        lunch_end=None,
+        avoid_close_after=time(16, 15),
+        market_close=time(16, 30),
+        timezone='Europe/London',
+    ),
+    'ASX': MarketConfig(
+        name='Australian Securities Exchange',
+        exchange='ASX',
+        currency='AUD',
+        market_open=time(10, 0),
+        avoid_open_until=time(10, 15),
+        lunch_start=None,
+        lunch_end=None,
+        avoid_close_after=time(15, 50),
+        market_close=time(16, 0),
+        timezone='Australia/Sydney',
+    ),
+}
 
 
 class DayTradeMode(Enum):
@@ -230,14 +311,6 @@ class ChameleonDayTrader:
     - Time-of-day awareness
     """
 
-    # Market hours (Eastern)
-    MARKET_OPEN = time(9, 30)
-    AVOID_OPEN_UNTIL = time(9, 50)     # Skip first 20 min
-    LUNCH_START = time(12, 0)          # Lunch break start
-    LUNCH_END = time(13, 0)            # Lunch break end
-    AVOID_CLOSE_AFTER = time(15, 45)   # Skip last 15 min
-    MARKET_CLOSE = time(16, 0)
-
     def __init__(
         self,
         position_pct: float = 0.02,         # 2% of account per trade
@@ -249,8 +322,12 @@ class ChameleonDayTrader:
         trailing_stop_distance: float = 1.0,    # Trail at 1x ATR distance
         min_volume_surge: float = 1.3,      # 30% volume increase to confirm
         cooldown_bars: int = 6,             # 30 min cooldown after stop-loss
+        market: str = 'NYSE',               # Market preset name
     ):
         self.analyzer = FastMomentumAnalyzer()
+
+        # Market configuration
+        self.market_config = MARKET_PRESETS.get(market.upper(), MARKET_PRESETS['NYSE'])
 
         # Position sizing (percentage with dollar cap)
         self.position_pct = position_pct
@@ -364,14 +441,15 @@ class ChameleonDayTrader:
     def _is_tradeable_time(self, timestamp: datetime) -> bool:
         """Check if current time is suitable for new entries."""
         t = timestamp.time()
+        mc = self.market_config
         # Avoid the opening chaos
-        if t < self.AVOID_OPEN_UNTIL:
+        if t < mc.avoid_open_until:
             return False
         # Lunch break - low volume, choppy, spreads widen
-        if self.LUNCH_START <= t < self.LUNCH_END:
+        if mc.lunch_start and mc.lunch_end and mc.lunch_start <= t < mc.lunch_end:
             return False
         # Avoid the closing rush
-        if t >= self.AVOID_CLOSE_AFTER:
+        if t >= mc.avoid_close_after:
             return False
         return True
 
@@ -719,7 +797,7 @@ class ChameleonDayTrader:
                 reason = f"Strong reversal: mode={mode.name}, RSI={signals['rsi']:.0f}"
 
             # End of day - close all positions
-            elif timestamp.time() >= self.MARKET_CLOSE:
+            elif timestamp.time() >= self.market_config.market_close:
                 action = 'sell'
                 reason = "End of day close"
 
@@ -746,7 +824,7 @@ class ChameleonDayTrader:
                 reason = f"Strong reversal: mode={mode.name}, RSI={signals['rsi']:.0f}"
 
             # End of day
-            elif timestamp.time() >= self.MARKET_CLOSE:
+            elif timestamp.time() >= self.market_config.market_close:
                 action = 'cover'
                 reason = "End of day close"
 
@@ -778,12 +856,14 @@ class ChameleonDayTrader:
 def create_daytrader(
     aggressive: bool = True,
     max_position_dollars: float = 10000,
+    market: str = 'NYSE',
 ) -> ChameleonDayTrader:
     """Create a day trader instance.
 
     Args:
         aggressive: Use aggressive settings (wider targets, lower thresholds)
         max_position_dollars: Hard cap on position size in dollars (default $10k)
+        market: Market preset ('NYSE', 'HKEX', 'TSE', 'LSE', 'ASX')
     """
     if aggressive:
         return ChameleonDayTrader(
@@ -796,6 +876,7 @@ def create_daytrader(
             trailing_stop_distance=1.0,     # Trail 1x ATR behind
             min_volume_surge=1.2,           # 20% volume increase
             cooldown_bars=4,                # 20 min cooldown
+            market=market,
         )
     else:
         return ChameleonDayTrader(
@@ -808,4 +889,14 @@ def create_daytrader(
             trailing_stop_distance=1.5,     # Trail 1.5x ATR behind
             min_volume_surge=1.4,           # 40% volume increase
             cooldown_bars=6,                # 30 min cooldown
+            market=market,
         )
+
+
+def list_markets() -> None:
+    """Print available market presets."""
+    print("Available markets:")
+    for key, mc in MARKET_PRESETS.items():
+        lunch = f", lunch {mc.lunch_start.strftime('%H:%M')}-{mc.lunch_end.strftime('%H:%M')}" if mc.lunch_start else ""
+        print(f"  {key:6s} | {mc.name:35s} | {mc.exchange:5s} | {mc.currency} | "
+              f"{mc.market_open.strftime('%H:%M')}-{mc.market_close.strftime('%H:%M')}{lunch}")
