@@ -25,7 +25,7 @@ import argparse
 import signal
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 from trading_algo.broker.ibkr import IBKRBroker
@@ -440,6 +440,13 @@ def main():
         while trader.running:
             if args.duration and (time.time() - start_time) >= args.duration:
                 print("\nDuration reached.")
+                break
+
+            # Auto-stop after market close (5 min grace period)
+            now = datetime.now().time()
+            close_dt = datetime.combine(datetime.today(), mc.market_close) + timedelta(minutes=5)
+            if now >= close_dt.time():
+                print(f"\nMarket closed at {mc.market_close.strftime('%H:%M')}. Auto-stopping.")
                 break
 
             signals = trader.update()

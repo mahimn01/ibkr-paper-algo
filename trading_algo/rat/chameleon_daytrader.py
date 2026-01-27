@@ -244,7 +244,7 @@ class FastMomentumAnalyzer:
                 losses.append(abs(change))
 
         avg_gain = sum(gains) / len(gains) if gains else 0
-        avg_loss = sum(losses) / len(losses) if losses else 0.0001
+        avg_loss = max(sum(losses) / len(losses), 0.0001) if losses else 0.0001
         rs = avg_gain / avg_loss
         rsi = 100 - (100 / (1 + rs))
 
@@ -263,7 +263,7 @@ class FastMomentumAnalyzer:
                     old_gains.append(0)
                     old_losses.append(abs(change))
             old_avg_gain = sum(old_gains) / len(old_gains) if old_gains else 0
-            old_avg_loss = sum(old_losses) / len(old_losses) if old_losses else 0.0001
+            old_avg_loss = max(sum(old_losses) / len(old_losses), 0.0001) if old_losses else 0.0001
             old_rs = old_avg_gain / old_avg_loss
             old_rsi = 100 - (100 / (1 + old_rs))
             rsi_slope = rsi - old_rsi
