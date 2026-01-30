@@ -66,12 +66,23 @@ from trading_algo.stock_selector.scoring import (
     RegimeAdaptiveWeights,
     rank_candidates,
 )
+from trading_algo.stock_selector.ibkr_scanner import (
+    IBKRStockScanner,
+    ScanResult,
+    print_scan_results,
+    DAY_TRADE_UNIVERSE,
+)
 
 __all__ = [
     # Main selector
     "DayTradeStockSelector",
     "UniverseConfig",
     "print_selection_results",
+    # IBKR Scanner
+    "IBKRStockScanner",
+    "ScanResult",
+    "print_scan_results",
+    "DAY_TRADE_UNIVERSE",
     # Models
     "MarketRegime",
     "CatalystType",

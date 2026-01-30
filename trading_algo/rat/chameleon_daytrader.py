@@ -1,7 +1,15 @@
 """
-Chameleon Day Trader v2 - Improved Intraday Trading
+Chameleon Day Trader v3 - Improved Intraday Trading
 
-Major improvements over v1:
+Major improvements over v2:
+- Trend clarity scoring (rejects stocks with no clean directional trend)
+- Chop detection via SMA crossover counting (avoids TSLA-style whipsaws)
+- Minimum ATR% gate (skips stocks with insufficient intraday range like NVDA)
+- Volatility-adaptive position sizing (risk-based: wider ATR = fewer shares)
+- Directional movement analysis (measures trend strength vs noise)
+- Higher-high / lower-low price action confirmation for entries
+
+Carried from v2:
 - ATR-based adaptive stops (adjusts to each stock's volatility)
 - Trailing stop mechanism (locks in profits as trade moves favorably)
 - Momentum exhaustion filter (avoids chasing RSI extremes)
@@ -273,6 +281,75 @@ class FastMomentumAnalyzer:
         # Price distance from VWAP (positive = above, negative = below)
         vwap_distance = (current_price - vwap) / vwap if vwap > 0 else 0
 
+        # === NEW v3: Trend Clarity Score ===
+        # Count higher-highs/higher-lows (uptrend) and lower-highs/lower-lows (downtrend)
+        # over the medium lookback. Clean trends have consistent HH/HL or LH/LL.
+        trend_lookback = min(self.medium_period, len(highs) - 1)
+        hh_count = 0  # higher highs
+        hl_count = 0  # higher lows
+        lh_count = 0  # lower highs
+        ll_count = 0  # lower lows
+        for ti in range(-trend_lookback + 1, 0):
+            if highs[ti] > highs[ti - 1]:
+                hh_count += 1
+            else:
+                lh_count += 1
+            if lows[ti] > lows[ti - 1]:
+                hl_count += 1
+            else:
+                ll_count += 1
+
+        total_swings = max(trend_lookback - 1, 1)
+        # Uptrend clarity: fraction of bars making HH and HL
+        uptrend_clarity = (hh_count + hl_count) / (total_swings * 2)
+        # Downtrend clarity: fraction of bars making LH and LL
+        downtrend_clarity = (lh_count + ll_count) / (total_swings * 2)
+        # Overall trend clarity: max of up/down (0-1, higher = cleaner trend)
+        trend_clarity = max(uptrend_clarity, downtrend_clarity)
+
+        # === NEW v3: Chop Score (SMA Crossover Count) ===
+        # Count how many times price crosses the medium SMA in the fast period.
+        # Many crossovers = choppy, few = trending.
+        crossover_count = 0
+        for ci in range(-self.fast_period + 1, 0):
+            prev_above = prices[ci - 1] > medium_sma
+            curr_above = prices[ci] > medium_sma
+            if prev_above != curr_above:
+                crossover_count += 1
+        # Normalize: 0 crossovers = 0 chop, 4+ = max chop
+        chop_score = min(1.0, crossover_count / 4.0)
+
+        # === NEW v3: Directional Movement (simplified ADX) ===
+        # Measure ratio of directional movement to total range
+        dm_lookback = min(10, len(highs) - 1)
+        plus_dm_total = 0.0
+        minus_dm_total = 0.0
+        tr_total = 0.0
+        for di in range(-dm_lookback, 0):
+            up_move = highs[di] - highs[di - 1]
+            down_move = lows[di - 1] - lows[di]
+            tr_val = max(
+                highs[di] - lows[di],
+                abs(highs[di] - prices[di - 1]),
+                abs(lows[di] - prices[di - 1]),
+            )
+            tr_total += tr_val
+            if up_move > down_move and up_move > 0:
+                plus_dm_total += up_move
+            if down_move > up_move and down_move > 0:
+                minus_dm_total += down_move
+
+        if tr_total > 0:
+            plus_di = plus_dm_total / tr_total
+            minus_di = minus_dm_total / tr_total
+            dx = abs(plus_di - minus_di) / max(plus_di + minus_di, 0.0001)
+        else:
+            plus_di = 0
+            minus_di = 0
+            dx = 0
+        # dx ranges 0-1: 0 = no directional movement, 1 = pure trend
+        directional_strength = dx
+
         return {
             'fast_return': fast_return,
             'medium_return': medium_return,
@@ -294,14 +371,27 @@ class FastMomentumAnalyzer:
             'fast_sma': fast_sma,
             'medium_sma': medium_sma,
             'slow_sma': slow_sma,
+            # v3 additions
+            'trend_clarity': trend_clarity,
+            'chop_score': chop_score,
+            'directional_strength': directional_strength,
+            'plus_di': plus_di,
+            'minus_di': minus_di,
         }
 
 
 class ChameleonDayTrader:
     """
-    Day trading strategy v2 with adaptive risk management.
+    Day trading strategy v3 with adaptive risk management and chop filtering.
 
-    Key improvements over v1:
+    v3 improvements:
+    - Trend clarity filter rejects choppy stocks (fixes TSLA chop problem)
+    - Minimum ATR% gate skips low-volatility stocks (fixes NVDA range problem)
+    - Chop score based on SMA crossover frequency
+    - Directional movement strength requirement
+    - Volatility-adaptive position sizing (risk-parity: wider ATR = fewer shares)
+
+    v2 features retained:
     - ATR-based stops adapt to each stock's volatility
     - Trailing stops lock in profits
     - Momentum exhaustion filter avoids chasing
@@ -323,6 +413,11 @@ class ChameleonDayTrader:
         min_volume_surge: float = 1.3,      # 30% volume increase to confirm
         cooldown_bars: int = 6,             # 30 min cooldown after stop-loss
         market: str = 'NYSE',               # Market preset name
+        # v3 additions
+        min_atr_pct: float = 0.0015,        # 0.15% minimum ATR (skip tight-range stocks)
+        max_chop_score: float = 0.6,        # Reject if chop > 60% (too many SMA crossovers)
+        min_trend_clarity: float = 0.55,    # Minimum trend clarity for momentum entries
+        min_directional_strength: float = 0.2,  # Minimum DX for momentum entries
     ):
         self.analyzer = FastMomentumAnalyzer()
 
@@ -343,6 +438,12 @@ class ChameleonDayTrader:
         # Entry filters
         self.min_volume_surge = min_volume_surge
         self.cooldown_bars = cooldown_bars
+
+        # v3: Quality filters
+        self.min_atr_pct = min_atr_pct
+        self.max_chop_score = max_chop_score
+        self.min_trend_clarity = min_trend_clarity
+        self.min_directional_strength = min_directional_strength
 
         # State
         self.positions: Dict[str, dict] = {}
@@ -475,6 +576,32 @@ class ChameleonDayTrader:
         # No position - check for entry
         return self._check_entry(symbol, timestamp, price, signals, mode)
 
+    def _calculate_adaptive_size(
+        self,
+        base_pct: float,
+        atr_pct: float,
+        confidence: float,
+    ) -> float:
+        """
+        Calculate volatility-adaptive position size (v3).
+
+        Risk-parity: wider ATR = smaller position (same dollar risk per trade).
+        Higher confidence = larger position.
+        """
+        # Target risk per trade: ~0.3% of account
+        target_risk_pct = 0.003
+        # ATR-based sizing: if ATR is 0.5%, we want 0.3%/0.5% = 60% of base
+        if atr_pct > 0:
+            vol_adjusted = min(1.5, target_risk_pct / atr_pct)
+        else:
+            vol_adjusted = 1.0
+
+        # Confidence multiplier (0.5 at low confidence, 1.5 at high)
+        conf_mult = 0.5 + confidence
+
+        adaptive_size = base_pct * vol_adjusted * conf_mult
+        return max(0.005, min(self.max_position_pct, adaptive_size))
+
     def _check_entry(
         self,
         symbol: str,
@@ -483,13 +610,17 @@ class ChameleonDayTrader:
         signals: Dict,
         mode: DayTradeMode,
     ) -> DayTradeSignal:
-        """Check for entry opportunities with improved filters."""
+        """Check for entry opportunities with v3 quality filters."""
 
         volume_confirmed = signals['volume_surge'] >= self.min_volume_surge
         rsi = signals['rsi']
         rsi_slope = signals['rsi_slope']
         atr = signals['atr']
+        atr_pct = signals['atr_pct']
         vwap_dist = signals['vwap_distance']
+        trend_clarity = signals['trend_clarity']
+        chop_score = signals['chop_score']
+        directional_strength = signals['directional_strength']
 
         # No entries during cooldown
         if self._is_in_cooldown(symbol):
@@ -507,6 +638,16 @@ class ChameleonDayTrader:
         if atr <= 0:
             return self._hold_signal(symbol, timestamp, price, mode, "No ATR data")
 
+        # === v3: Minimum ATR% gate (skip tight-range stocks like NVDA on quiet days) ===
+        if atr_pct < self.min_atr_pct:
+            return self._hold_signal(symbol, timestamp, price, mode,
+                                     f"ATR too low ({atr_pct*100:.3f}% < {self.min_atr_pct*100:.3f}%)")
+
+        # === v3: Chop filter (reject choppy stocks like TSLA on trendless days) ===
+        if chop_score > self.max_chop_score:
+            return self._hold_signal(symbol, timestamp, price, mode,
+                                     f"Too choppy (chop={chop_score:.2f} > {self.max_chop_score})")
+
         # === LONG ENTRIES ===
 
         if mode == DayTradeMode.STRONG_MOMENTUM_UP:
@@ -518,15 +659,23 @@ class ChameleonDayTrader:
             if rsi_slope < -5:
                 return self._hold_signal(symbol, timestamp, price, mode,
                                          f"RSI decelerating slope={rsi_slope:.1f}")
+            # v3: Require minimum directional strength
+            if directional_strength < self.min_directional_strength:
+                return self._hold_signal(symbol, timestamp, price, mode,
+                                         f"Weak directional strength ({directional_strength:.2f})")
 
-            size_pct = self.max_position_pct if volume_confirmed else self.position_pct
+            base_conf = 0.8 if volume_confirmed else 0.6
+            size_pct = self._calculate_adaptive_size(
+                self.max_position_pct if volume_confirmed else self.position_pct,
+                atr_pct, base_conf,
+            )
             stop = price - atr * self.atr_stop_mult * 1.5  # Wider for strong momentum
             take_profit = price + atr * self.atr_target_mult * 1.5
 
             return self._enter_position(
                 symbol, timestamp, price, 1, size_pct, stop, take_profit, mode, atr,
-                confidence=0.8 if volume_confirmed else 0.6,
-                reason=f"Strong UP, RSI={rsi:.0f}, slope={rsi_slope:+.1f}, vol={signals['volume_surge']:.1f}x",
+                confidence=base_conf,
+                reason=f"Strong UP, RSI={rsi:.0f}, DX={directional_strength:.2f}, trend={trend_clarity:.2f}",
             )
 
         elif mode == DayTradeMode.MOMENTUM_UP:
@@ -534,15 +683,20 @@ class ChameleonDayTrader:
             if rsi > 70:
                 return self._hold_signal(symbol, timestamp, price, mode,
                                          f"Overbought RSI={rsi:.0f}")
+            # v3: Require trend clarity for regular momentum
+            if trend_clarity < self.min_trend_clarity:
+                return self._hold_signal(symbol, timestamp, price, mode,
+                                         f"Unclear trend ({trend_clarity:.2f} < {self.min_trend_clarity})")
 
-            size_pct = self.position_pct
+            base_conf = 0.6
+            size_pct = self._calculate_adaptive_size(self.position_pct, atr_pct, base_conf)
             stop = price - atr * self.atr_stop_mult
             take_profit = price + atr * self.atr_target_mult
 
             return self._enter_position(
                 symbol, timestamp, price, 1, size_pct, stop, take_profit, mode, atr,
-                confidence=0.6,
-                reason=f"Momentum UP, RSI={rsi:.0f}",
+                confidence=base_conf,
+                reason=f"Momentum UP, RSI={rsi:.0f}, clarity={trend_clarity:.2f}",
             )
 
         # === SHORT ENTRIES ===
@@ -555,45 +709,62 @@ class ChameleonDayTrader:
             if rsi_slope > 5:
                 return self._hold_signal(symbol, timestamp, price, mode,
                                          f"RSI recovering slope={rsi_slope:.1f}")
+            # v3: Require minimum directional strength
+            if directional_strength < self.min_directional_strength:
+                return self._hold_signal(symbol, timestamp, price, mode,
+                                         f"Weak directional strength ({directional_strength:.2f})")
 
-            size_pct = self.max_position_pct if volume_confirmed else self.position_pct
+            base_conf = 0.8 if volume_confirmed else 0.6
+            size_pct = self._calculate_adaptive_size(
+                self.max_position_pct if volume_confirmed else self.position_pct,
+                atr_pct, base_conf,
+            )
             stop = price + atr * self.atr_stop_mult * 1.5
             take_profit = price - atr * self.atr_target_mult * 1.5
 
             return self._enter_position(
                 symbol, timestamp, price, -1, size_pct, stop, take_profit, mode, atr,
-                confidence=0.8 if volume_confirmed else 0.6,
-                reason=f"Strong DOWN, RSI={rsi:.0f}, slope={rsi_slope:+.1f}, vol={signals['volume_surge']:.1f}x",
+                confidence=base_conf,
+                reason=f"Strong DOWN, RSI={rsi:.0f}, DX={directional_strength:.2f}, trend={trend_clarity:.2f}",
             )
 
         elif mode == DayTradeMode.MOMENTUM_DOWN:
             if rsi < 30:
                 return self._hold_signal(symbol, timestamp, price, mode,
                                          f"Oversold RSI={rsi:.0f}")
+            # v3: Require trend clarity
+            if trend_clarity < self.min_trend_clarity:
+                return self._hold_signal(symbol, timestamp, price, mode,
+                                         f"Unclear trend ({trend_clarity:.2f} < {self.min_trend_clarity})")
 
-            size_pct = self.position_pct
+            base_conf = 0.6
+            size_pct = self._calculate_adaptive_size(self.position_pct, atr_pct, base_conf)
             stop = price + atr * self.atr_stop_mult
             take_profit = price - atr * self.atr_target_mult
 
             return self._enter_position(
                 symbol, timestamp, price, -1, size_pct, stop, take_profit, mode, atr,
-                confidence=0.6,
-                reason=f"Momentum DOWN, RSI={rsi:.0f}",
+                confidence=base_conf,
+                reason=f"Momentum DOWN, RSI={rsi:.0f}, clarity={trend_clarity:.2f}",
             )
 
         # === CHOPPY MODE - MEAN REVERSION ENTRIES ===
+        # Note: Chop filter above already rejects high-chop, so these only
+        # trigger when chop is moderate (stock is range-bound but not erratic)
 
         elif mode == DayTradeMode.CHOPPY_BULLISH:
             # Mean reversion: only buy on pullbacks BELOW VWAP with RSI dip
             if vwap_dist < -0.001 and rsi < 45 and rsi_slope > 0:
-                # Price below VWAP, RSI was low but turning up = mean reversion buy
-                size_pct = self.position_pct * 0.75
+                base_conf = 0.5
+                size_pct = self._calculate_adaptive_size(
+                    self.position_pct * 0.75, atr_pct, base_conf,
+                )
                 stop = price - atr * self.atr_stop_mult
                 take_profit = price + atr * self.atr_target_mult * 0.75
 
                 return self._enter_position(
                     symbol, timestamp, price, 1, size_pct, stop, take_profit, mode, atr,
-                    confidence=0.5,
+                    confidence=base_conf,
                     reason=f"Mean-rev BUY: VWAP dist={vwap_dist*100:.2f}%, RSI={rsi:.0f} turning up",
                 )
 
@@ -603,46 +774,25 @@ class ChameleonDayTrader:
         elif mode == DayTradeMode.CHOPPY_BEARISH:
             # Mean reversion: only short on rallies ABOVE VWAP with RSI peak
             if vwap_dist > 0.001 and rsi > 55 and rsi_slope < 0:
-                size_pct = self.position_pct * 0.75
+                base_conf = 0.5
+                size_pct = self._calculate_adaptive_size(
+                    self.position_pct * 0.75, atr_pct, base_conf,
+                )
                 stop = price + atr * self.atr_stop_mult
                 take_profit = price - atr * self.atr_target_mult * 0.75
 
                 return self._enter_position(
                     symbol, timestamp, price, -1, size_pct, stop, take_profit, mode, atr,
-                    confidence=0.5,
+                    confidence=base_conf,
                     reason=f"Mean-rev SHORT: VWAP dist={vwap_dist*100:.2f}%, RSI={rsi:.0f} turning down",
                 )
 
             return self._hold_signal(symbol, timestamp, price, mode,
                                      "Choppy bearish - waiting for rally")
 
-        # === NEUTRAL - SCALP ONLY ON STRONG MICRO SIGNALS ===
-
-        elif mode == DayTradeMode.NEUTRAL:
-            fast_ret = signals['fast_return']
-
-            # Require stronger micro-momentum + volume confirmation
-            if fast_ret > 0.001 and rsi < 55 and volume_confirmed:
-                size_pct = self.position_pct * 0.5
-                stop = price - atr * self.atr_stop_mult * 0.75
-                take_profit = price + atr * self.atr_target_mult * 0.5
-
-                return self._enter_position(
-                    symbol, timestamp, price, 1, size_pct, stop, take_profit, mode, atr,
-                    confidence=0.35,
-                    reason=f"Micro long, RSI={rsi:.0f}, ret={fast_ret*100:.2f}%, vol confirmed",
-                )
-
-            elif fast_ret < -0.001 and rsi > 45 and volume_confirmed:
-                size_pct = self.position_pct * 0.5
-                stop = price + atr * self.atr_stop_mult * 0.75
-                take_profit = price - atr * self.atr_target_mult * 0.5
-
-                return self._enter_position(
-                    symbol, timestamp, price, -1, size_pct, stop, take_profit, mode, atr,
-                    confidence=0.35,
-                    reason=f"Micro short, RSI={rsi:.0f}, ret={fast_ret*100:.2f}%, vol confirmed",
-                )
+        # === NEUTRAL - NO TRADES (v3: removed micro-scalp in neutral) ===
+        # v3 learning: micro-scalps in neutral mode were net negative on live.
+        # Better to wait for a real signal than force marginal trades.
 
         # No entry
         return self._hold_signal(symbol, timestamp, price, mode, "No entry signal")
@@ -877,6 +1027,11 @@ def create_daytrader(
             min_volume_surge=1.2,           # 20% volume increase
             cooldown_bars=4,                # 20 min cooldown
             market=market,
+            # v3: Aggressive = looser quality filters
+            min_atr_pct=0.0012,             # 0.12% min ATR (still skip dead stocks)
+            max_chop_score=0.65,            # Allow slightly choppier
+            min_trend_clarity=0.52,         # Slightly lower bar
+            min_directional_strength=0.15,  # Lower DX threshold
         )
     else:
         return ChameleonDayTrader(
@@ -890,6 +1045,11 @@ def create_daytrader(
             min_volume_surge=1.4,           # 40% volume increase
             cooldown_bars=6,                # 30 min cooldown
             market=market,
+            # v3: Conservative = stricter quality filters
+            min_atr_pct=0.002,              # 0.2% min ATR
+            max_chop_score=0.5,             # Reject moderate chop
+            min_trend_clarity=0.60,         # Higher trend clarity bar
+            min_directional_strength=0.25,  # Higher DX threshold
         )
 
 
