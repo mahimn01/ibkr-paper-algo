@@ -21,3 +21,4 @@ logs/
 # OS/editor
 .idea/
 .vscode/
+data/*.csv

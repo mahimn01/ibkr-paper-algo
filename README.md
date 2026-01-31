@@ -1,105 +1,117 @@
-# IBKR Trading Algo Skeleton (Paper/Sim)
+# Orchestrator Trading System
 
-Minimal, extensible starter structure for an algorithmic trading bot that connects to Interactive Brokers (IBKR) paper trading via TWS or IB Gateway.
+A multi-edge ensemble day trading system that connects to Interactive Brokers (IBKR) for automated trading.
 
-## What this gives you
+## The Orchestrator Approach
 
-- A clean project layout (`trading_algo/`) with an execution engine, strategy hooks, and a broker abstraction.
-- An `IBKRBroker` implementation (uses `ib_insync`) for paper trading.
-- A `SimBroker` so you can run the bot without TWS/Gateway running.
-- A CLI to place basic orders (stocks/futures/forex), fetch a market data snapshot, and run a simple example strategy loop.
+Unlike traditional retail algorithms that use single indicators, the Orchestrator combines **6 independent edge sources** into a unified decision framework:
 
-## Prereqs (IBKR)
+1. **Market Regime Engine** - Detects trend/range/reversal days
+2. **Relative Strength** - Compares stock vs sector vs market
+3. **Statistical Extremes** - Identifies z-score extremes
+4. **Volume Profile** - Auction theory (value area, POC)
+5. **Cross-Asset Confirmation** - Checks related assets
+6. **Time-of-Day Patterns** - Opening drive, lunch, power hour
 
-1. Install and run **Trader Workstation (TWS)** or **IB Gateway**
-2. Log into **Paper Trading**
-3. Enable API access:
-   - TWS: `File -> Global Configuration -> API -> Settings -> Enable ActiveX and Socket Clients`
-   - Set an API port:
-     - TWS paper default: `7497` (live: `7496`)
-     - Gateway paper default: `4002` (live: `4001`)
-   - Optional: add trusted IPs / disable read-only API
+**Trade only when 4+ edges agree. Any edge can veto.**
 
-## Install (Python)
-
-This skeleton expects Python 3.10+.
+## Quick Start
 
 ```bash
+# Install dependencies
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+
+# Configure (copy .env.example to .env)
+cp .env.example .env
+
+# Dry run (always do this first!)
+python3 run.py --dry-run
+
+# Live trading with auto-selected stocks
+python3 run.py
 ```
 
-## Configure
+## Usage
 
-Copy `.env.example` to `.env` and edit if you want:
+```bash
+# Auto-select top movers and trade
+python3 run.py
+
+# Specify number of stocks
+python3 run.py --top 5
+
+# Trade specific symbols
+python3 run.py --symbols INTC AMD NVDA
+
+# Dry run mode (paper trade simulation)
+python3 run.py --dry-run
+```
+
+## Project Structure
+
+```
+├── run.py                         # Main entry point
+├── trading_algo/
+│   ├── orchestrator/              # The Orchestrator strategy
+│   │   ├── __init__.py
+│   │   ├── strategy.py            # Main Orchestrator class
+│   │   ├── types.py               # Enums and dataclasses
+│   │   └── edges/                 # Independent edge engines
+│   │       ├── market_regime.py
+│   │       ├── relative_strength.py
+│   │       ├── statistics.py
+│   │       ├── volume_profile.py
+│   │       ├── cross_asset.py
+│   │       └── time_of_day.py
+│   ├── broker/                    # Broker implementations
+│   │   ├── ibkr.py                # Interactive Brokers
+│   │   ├── sim.py                 # Simulation broker
+│   │   └── base.py                # Base abstractions
+│   ├── stock_selector/            # Stock scanning/selection
+│   └── strategies/                # Backward compatibility imports
+├── archive/                       # Deprecated code (RAT, Chameleon)
+├── tests/                         # Test suite
+└── docs/                          # Documentation
+```
+
+## Prerequisites
+
+1. Install **Trader Workstation (TWS)** or **IB Gateway**
+2. Log into **Paper Trading**
+3. Enable API access:
+   - TWS: `File -> Global Configuration -> API -> Settings -> Enable ActiveX and Socket Clients`
+   - Port: TWS paper `7497`, Gateway paper `4002`
+
+## Configuration
+
+Copy `.env.example` to `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-Safety defaults:
-- `TRADING_REQUIRE_PAPER` is enforced in code (cannot be disabled): the bot refuses to run if the connected session doesn't look like Paper Trading (managed accounts not starting with `DU`).
-- `TRADING_DRY_RUN=true` stages orders only (no orders sent). Default is `false`.
-- `TRADING_LIVE_ENABLED=false` blocks sending orders to IBKR unless you explicitly enable it.
-- `TRADING_ORDER_TOKEN` + `--confirm-token` is a second gate required to send IBKR orders.
-- `TRADING_DB_PATH` enables a sqlite audit log for decisions and orders.
+Key settings:
+- `TRADING_DRY_RUN=true` - Stages orders only (no orders sent)
+- `TRADING_LIVE_ENABLED=false` - Blocks sending orders
+- `TRADING_ORDER_TOKEN` - Required token for live orders
+- `TRADING_DB_PATH` - SQLite audit log path
 
-## Run (no IBKR required)
-
-```bash
-python3 -m trading_algo.cli place-order --broker sim --symbol AAPL --qty 1 --side BUY --type MKT
-python3 -m trading_algo.cli run --broker sim
-```
-
-## Run (paper trading)
-
-Make sure TWS/Gateway is running and API is enabled, then:
+## CLI Commands
 
 ```bash
-export TRADING_DRY_RUN=false
-export TRADING_LIVE_ENABLED=true
-export TRADING_ORDER_TOKEN=I_UNDERSTAND_PAPER_TRADING
-python3 -m trading_algo.cli --confirm-token "$TRADING_ORDER_TOKEN" place-order --broker ibkr --kind STK --symbol AAPL --qty 1 --side BUY --type MKT
-python3 -m trading_algo.cli --confirm-token "$TRADING_ORDER_TOKEN" place-order --broker ibkr --kind FUT --symbol ES --exchange CME --expiry 202503 --qty 1 --side BUY --type MKT
-python3 -m trading_algo.cli --confirm-token "$TRADING_ORDER_TOKEN" place-order --broker ibkr --kind FX --symbol EURUSD --qty 10000 --side BUY --type MKT
-python3 -m trading_algo.cli run --broker ibkr
-```
+# Place orders
+python3 -m trading_algo.cli place-order --broker ibkr --symbol AAPL --qty 1 --side BUY --type MKT
 
-## Market data snapshot
-
-```bash
+# Market data snapshot
 python3 -m trading_algo.cli snapshot --broker ibkr --kind STK --symbol AAPL
-python3 -m trading_algo.cli snapshot --broker ibkr --kind FUT --symbol ES --exchange CME --expiry 202503
-python3 -m trading_algo.cli snapshot --broker ibkr --kind FX --symbol EURUSD
-```
 
-## Historical bars
-
-```bash
+# Historical bars
 python3 -m trading_algo.cli history --broker ibkr --kind STK --symbol AAPL --duration "1 D" --bar-size "5 mins"
-```
 
-## Historical backtests (IBKR -> CSV -> deterministic)
-
-```bash
-python3 -m trading_algo.cli export-history --broker ibkr --kind STK --symbol AAPL --bar-size "5 mins" --duration-per-call "30 D" --out-csv data/AAPL_5m.csv --validate
-python3 -m trading_algo.cli backtest --csv data/AAPL_5m.csv --kind STK --symbol AAPL
-```
-
-## Paper smoke test
-
-```bash
+# Paper smoke test
 python3 -m trading_algo.cli --ibkr-port 7497 paper-smoke
-python3 -m trading_algo.cli --ibkr-port 7497 --confirm-token "$TRADING_ORDER_TOKEN" paper-smoke --order-test
-```
-
-## Order utilities
-
-```bash
-python3 -m trading_algo.cli order-status --broker ibkr --order-id 4
-python3 -m trading_algo.cli cancel-order --broker ibkr --order-id 4
-python3 -m trading_algo.cli place-bracket --broker ibkr --kind STK --symbol AAPL --side BUY --qty 1 --entry-limit 100 --take-profit 110 --stop-loss 95
 ```
 
 ## Tests
@@ -108,23 +120,14 @@ python3 -m trading_algo.cli place-bracket --broker ibkr --kind STK --symbol AAPL
 python3 -m unittest discover -s tests
 ```
 
-## LLM trader (optional)
+## Documentation
 
-See `docs/LLM_TRADER.md`.
+- `docs/ARCHITECTURE.md` - System architecture
+- `docs/STRATEGY.md` - Orchestrator strategy details
+- `docs/SAFETY.md` - Safety mechanisms
+- `docs/WORKFLOWS.md` - Common workflows
+- `docs/DB_SCHEMA.md` - Audit database schema
 
-## SQLite audit trail
+## License
 
-Set `TRADING_DB_PATH=trading_audit.sqlite3` and the CLI/Engine will log:
-- `runs` (config snapshot + start/end)
-- `decisions` (strategy intents accepted/rejected)
-- `orders` (submitted orders)
-- `order_status_events` (status snapshots like Submitted/Filled/Cancelled)
-- `errors` (exceptions + key failures)
-
-## Docs
-
-- `docs/ARCHITECTURE.md`
-- `docs/SAFETY.md`
-- `docs/WORKFLOWS.md`
-- `docs/DB_SCHEMA.md`
-- `docs/LLM_TRADER.md`
+MIT
