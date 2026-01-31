@@ -46,7 +46,7 @@ from trading_algo.broker.ibkr import IBKRBroker
 from trading_algo.broker.base import OrderRequest
 from trading_algo.config import IBKRConfig
 from trading_algo.instruments import InstrumentSpec
-from trading_algo.strategies.orchestrator import (
+from trading_algo.orchestrator import (
     Orchestrator,
     OrchestratorSignal,
     MarketRegime,

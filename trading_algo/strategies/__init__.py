@@ -2,9 +2,13 @@
 Trading Strategies Package.
 
 Contains high-level trading strategies that combine multiple analysis techniques.
+
+For backward compatibility, this module re-exports from the new modular
+orchestrator package. Prefer importing directly from trading_algo.orchestrator.
 """
 
-from trading_algo.strategies.orchestrator import (
+# Re-export from the modular orchestrator for backward compatibility
+from trading_algo.orchestrator import (
     Orchestrator,
     OrchestratorSignal,
     MarketRegime,
