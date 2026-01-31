@@ -26,15 +26,13 @@ class TradesWidget(Static):
         self.store.add_listener(self._on_store_update)
 
     def compose(self) -> ComposeResult:
-        yield Vertical(
+        with Vertical(
             Static("[bold]Trade History[/bold]", id="trades-title"),
-            TabbedContent(
-                TabPane("Today", id="today-tab"),
-                TabPane("Yesterday", id="yesterday-tab"),
-                id="trades-tabs",
-            ),
             id="trades-container",
-        )
+        ):
+            with TabbedContent(id="trades-tabs"):
+                yield TabPane("Today", id="today-tab")
+                yield TabPane("Yesterday", id="yesterday-tab")
 
     def on_mount(self) -> None:
         """Set up the tables."""
