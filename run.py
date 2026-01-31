@@ -815,10 +815,10 @@ def _run_with_dashboard(trader: OrchestratorAutoTrader, broker: IBKRBroker, args
         test_orchestrator = create_orchestrator()
 
         # Create engine
-        engine = BacktestEngine(bt_config, test_orchestrator)
+        engine = BacktestEngine(bt_config)
 
         # Run backtest
-        results = engine.run(data, lambda pct, msg: progress_callback(0.5 + pct * 0.5, msg))
+        results = engine.run(test_orchestrator, data, lambda pct, msg: progress_callback(0.5 + pct * 0.5, msg))
 
         return results
 
@@ -947,10 +947,10 @@ def _run_backtest(args):
     # Create orchestrator and engine
     print("\nRunning backtest...")
     orchestrator = create_orchestrator()
-    engine = BacktestEngine(config, orchestrator)
+    engine = BacktestEngine(config)
 
     # Run backtest
-    results = engine.run(data, progress)
+    results = engine.run(orchestrator, data, progress)
     print()
 
     # Print results
