@@ -444,17 +444,27 @@ class BacktestScreen(Screen):
 
     BacktestScreen #main-container {
         padding: 1;
+        height: 100%;
     }
 
     BacktestScreen #left-panel {
         width: 50%;
         height: 100%;
         padding-right: 1;
+        overflow-y: auto;
     }
 
     BacktestScreen #right-panel {
         width: 50%;
         height: 100%;
+    }
+
+    BacktestScreen #daily-container {
+        height: 50%;
+    }
+
+    BacktestScreen #trades-container {
+        height: 50%;
     }
 
     BacktestScreen .title {
@@ -477,7 +487,7 @@ class BacktestScreen(Screen):
         yield Header()
 
         with Horizontal(id="main-container"):
-            with Vertical(id="left-panel"):
+            with ScrollableContainer(id="left-panel"):
                 yield BacktestConfigPanel(id="config-panel")
                 yield BacktestProgressPanel(id="progress-panel")
                 yield MetricsSummaryPanel(id="metrics-panel")

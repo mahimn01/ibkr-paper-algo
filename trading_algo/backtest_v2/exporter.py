@@ -249,7 +249,7 @@ class BacktestExporter:
             "slippage_pct": results.config.slippage_pct,
             "max_position_size": results.config.max_position_size,
             "bar_size": results.config.bar_size,
-            "algorithm_name": results.config.algorithm_name,
+            "algorithm_name": results.config.strategy_name,
             "algorithm_params": results.config.algorithm_params,
         }
 
@@ -528,7 +528,7 @@ class BacktestExporter:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Backtest Report - {config.algorithm_name or 'Strategy'}</title>
+    <title>Backtest Report - {config.strategy_name or 'Strategy'}</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
@@ -646,7 +646,7 @@ class BacktestExporter:
     <div class="container">
         <h1>📊 Backtest Report</h1>
         <p style="text-align: center; color: #888; margin-bottom: 30px;">
-            {config.algorithm_name or 'Strategy'} |
+            {config.strategy_name or 'Strategy'} |
             {config.start_date.isoformat()} to {config.end_date.isoformat()} |
             Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         </p>
@@ -842,7 +842,7 @@ class BacktestExporter:
                 </div>
                 <div class="config-item">
                     <span class="metric-label">Algorithm:</span><br>
-                    <strong>{config.algorithm_name or 'Custom'}</strong>
+                    <strong>{config.strategy_name or 'Custom'}</strong>
                 </div>
             </div>
         </div>

@@ -777,7 +777,7 @@ def _run_with_dashboard(trader: OrchestratorAutoTrader, broker: IBKRBroker, args
             end_date=config["end_date"],
             initial_capital=config["initial_capital"],
             bar_size=config["bar_size"],
-            algorithm_name="Orchestrator",
+            strategy_name="Orchestrator",
         )
 
         # Get data
@@ -909,12 +909,12 @@ def _run_backtest(args):
 
     # Create config
     config = BacktestConfig(
+        strategy_name="Orchestrator",
         symbols=symbols,
         start_date=start_date,
         end_date=end_date,
         initial_capital=args.capital,
         bar_size="5 mins",
-        algorithm_name="Orchestrator",
     )
 
     # Get data
