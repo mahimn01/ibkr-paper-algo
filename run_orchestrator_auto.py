@@ -164,21 +164,26 @@ class OrchestratorAutoTrader:
         print("SCANNING FOR TODAY'S MOVERS")
         print("=" * 70)
 
-        result = self.scanner.scan_todays_movers(
-            top_n=self.top_n,
-            min_move_pct=0.02,  # At least 2% move
-            min_range_pct=0.015,  # At least 1.5% intraday range
-            verbose=True,
-        )
+        try:
+            result = self.scanner.scan_todays_movers(
+                top_n=self.top_n * 2,  # Scan for more, then pick top N
+                min_gap_pct=0.01,  # At least 1% gap/move
+                verbose=True,
+            )
 
-        if not result.candidates:
-            print("No movers found! Using default universe subset.")
+            if not result.candidates:
+                print("No movers found! Using default universe subset.")
+                return ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"][:self.top_n]
+
+            symbols = [c.symbol for c in result.candidates[:self.top_n]]
+
+            print(f"\nSelected for trading: {', '.join(symbols)}")
+            return symbols
+
+        except Exception as e:
+            print(f"Error during scan: {e}")
+            print("Using default universe subset.")
             return ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"][:self.top_n]
-
-        symbols = [c.symbol for c in result.candidates[:self.top_n]]
-
-        print(f"\nSelected for trading: {', '.join(symbols)}")
-        return symbols
 
     def start(self):
         """Start the auto trader."""
