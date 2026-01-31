@@ -24,6 +24,8 @@ Usage:
         await dashboard.run_async()
 """
 
+from typing import Any, Callable, Optional
+
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
@@ -41,6 +43,7 @@ from .widgets import (
     SignalsWidget,
     LogWidget,
 )
+from .backtest_screen import BacktestScreen
 
 
 class HelpScreen(Screen):
@@ -62,6 +65,7 @@ class HelpScreen(Screen):
   [cyan]p[/cyan]            - Pause/Resume algorithm
   [cyan]r[/cyan]            - Refresh display
   [cyan]c[/cyan]            - Clear activity log
+  [cyan]b[/cyan]            - Open backtest dashboard
   [cyan]h[/cyan] / [cyan]?[/cyan]        - Show this help
   [cyan]Escape[/cyan]       - Close help/dialogs
 
@@ -188,6 +192,7 @@ class TradingDashboard(App):
         Binding("p", "toggle_pause", "Pause"),
         Binding("r", "refresh", "Refresh"),
         Binding("c", "clear_log", "Clear Log"),
+        Binding("b", "show_backtest", "Backtest"),
         Binding("h", "show_help", "Help"),
         Binding("question_mark", "show_help", "Help", show=False),
         Binding("escape", "escape", "Close", show=False),
@@ -198,6 +203,7 @@ class TradingDashboard(App):
         store: DashboardStore | None = None,
         event_bus: EventBus | None = None,
         algorithm_name: str = "Trading Algorithm",
+        backtest_callback: Optional[Callable] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -205,6 +211,7 @@ class TradingDashboard(App):
         self.event_bus = event_bus or get_event_bus()
         self.algorithm_name = algorithm_name
         self._is_paused = False
+        self._backtest_callback = backtest_callback
 
         # Set initial algorithm status
         initial_status = AlgorithmStatus(
@@ -289,6 +296,11 @@ class TradingDashboard(App):
         """Show help screen."""
         self.push_screen(HelpScreen())
 
+    def action_show_backtest(self) -> None:
+        """Show backtest screen."""
+        screen = BacktestScreen(run_backtest_callback=self._backtest_callback)
+        self.push_screen(screen)
+
     def action_escape(self) -> None:
         """Handle escape key."""
         # If we're on a screen, pop it
@@ -300,6 +312,7 @@ def run_dashboard(
     algorithm_name: str = "Trading Algorithm",
     store: DashboardStore | None = None,
     event_bus: EventBus | None = None,
+    backtest_callback: Optional[Callable] = None,
 ) -> None:
     """
     Run the trading dashboard.
@@ -308,11 +321,13 @@ def run_dashboard(
         algorithm_name: Name to display in the header
         store: Optional custom store instance
         event_bus: Optional custom event bus instance
+        backtest_callback: Optional callback for running backtests
     """
     app = TradingDashboard(
         store=store,
         event_bus=event_bus,
         algorithm_name=algorithm_name,
+        backtest_callback=backtest_callback,
     )
     app.run()
 
@@ -321,6 +336,7 @@ async def run_dashboard_async(
     algorithm_name: str = "Trading Algorithm",
     store: DashboardStore | None = None,
     event_bus: EventBus | None = None,
+    backtest_callback: Optional[Callable] = None,
 ) -> None:
     """
     Run the trading dashboard asynchronously.
@@ -331,5 +347,6 @@ async def run_dashboard_async(
         store=store,
         event_bus=event_bus,
         algorithm_name=algorithm_name,
+        backtest_callback=backtest_callback,
     )
     await app.run_async()

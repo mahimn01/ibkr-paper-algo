@@ -71,6 +71,19 @@ try:
 except ImportError:
     DASHBOARD_AVAILABLE = False
 
+# Backtest imports
+try:
+    from trading_algo.backtest_v2 import (
+        BacktestEngine,
+        BacktestConfig,
+        BacktestExporter,
+        DataProvider,
+        DataRequest,
+    )
+    BACKTEST_AVAILABLE = True
+except ImportError:
+    BACKTEST_AVAILABLE = False
+
 
 # Core reference assets (always loaded for market context)
 CORE_REFERENCE_ASSETS = [
@@ -601,6 +614,8 @@ Examples:
   python run.py --symbols GLD SIVR           # Trade specific symbols
   python run.py --rescan 60                  # Rescan for movers every 60 min
   python run.py --dashboard --dry-run        # Dashboard in dry-run mode
+  python run.py --backtest --symbols SPY     # Run backtest for SPY
+  python run.py --backtest --start 2025-01-01 --end 2025-12-31  # Custom date range
         """
     )
     parser.add_argument("--symbols", nargs="*", help="Specific symbols to trade (skips scanning)")
@@ -613,7 +628,19 @@ Examples:
     parser.add_argument("--port", type=int, default=7497, help="IBKR port (default: 7497)")
     parser.add_argument("--dashboard", action="store_true", help="Run with interactive TUI dashboard")
 
+    # Backtest arguments
+    parser.add_argument("--backtest", action="store_true", help="Run backtest instead of live trading")
+    parser.add_argument("--start", type=str, help="Backtest start date (YYYY-MM-DD)")
+    parser.add_argument("--end", type=str, help="Backtest end date (YYYY-MM-DD)")
+    parser.add_argument("--capital", type=float, default=100000, help="Initial capital for backtest (default: 100000)")
+    parser.add_argument("--export", action="store_true", help="Export backtest results to folder")
+
     args = parser.parse_args()
+
+    # Check if backtest mode
+    if args.backtest:
+        _run_backtest(args)
+        return
 
     print("=" * 70)
     print("ORCHESTRATOR AUTO TRADER")
@@ -735,6 +762,66 @@ def _run_with_dashboard(trader: OrchestratorAutoTrader, broker: IBKRBroker, args
     """Run with interactive TUI dashboard."""
     from trading_algo.dashboard import TradingDashboard, get_store
 
+    # Create backtest callback for dashboard
+    async def run_backtest_callback(config: dict, progress_callback) -> "BacktestResults":
+        """Callback for running backtests from dashboard."""
+        if not BACKTEST_AVAILABLE:
+            raise RuntimeError("Backtest module not available")
+
+        from datetime import date
+
+        # Create backtest config
+        bt_config = BacktestConfig(
+            symbols=config["symbols"],
+            start_date=config["start_date"],
+            end_date=config["end_date"],
+            initial_capital=config["initial_capital"],
+            bar_size=config["bar_size"],
+            algorithm_name="Orchestrator",
+        )
+
+        # Get data
+        data_provider = DataProvider()
+        progress_callback(0.1, "Fetching historical data...")
+
+        requests = [
+            DataRequest(
+                symbol=s,
+                start_date=config["start_date"],
+                end_date=config["end_date"],
+                bar_size=config["bar_size"],
+            )
+            for s in config["symbols"]
+        ]
+
+        data = data_provider.get_data(
+            requests,
+            lambda pct, msg: progress_callback(0.1 + pct * 0.4, msg),
+        )
+
+        if not data:
+            # Use sample data if no real data
+            progress_callback(0.2, "No data found, generating sample data...")
+            for s in config["symbols"]:
+                data[s] = data_provider.generate_sample_data(
+                    s,
+                    config["start_date"],
+                    config["end_date"],
+                    config["bar_size"],
+                )
+
+        # Create orchestrator for backtest
+        progress_callback(0.5, "Running backtest...")
+        test_orchestrator = create_orchestrator()
+
+        # Create engine
+        engine = BacktestEngine(bt_config, test_orchestrator)
+
+        # Run backtest
+        results = engine.run(data, lambda pct, msg: progress_callback(0.5 + pct * 0.5, msg))
+
+        return results
+
     # Create trading loop thread
     stop_event = threading.Event()
 
@@ -778,11 +865,150 @@ def _run_with_dashboard(trader: OrchestratorAutoTrader, broker: IBKRBroker, args
         dashboard = TradingDashboard(
             algorithm_name="Orchestrator Auto Trader",
             store=get_store(),
+            backtest_callback=run_backtest_callback if BACKTEST_AVAILABLE else None,
         )
         dashboard.run()
     finally:
         stop_event.set()
         trader.stop()
+
+
+def _run_backtest(args):
+    """Run backtest mode."""
+    if not BACKTEST_AVAILABLE:
+        print("ERROR: Backtest module not available.")
+        print("Make sure trading_algo/backtest_v2 exists.")
+        sys.exit(1)
+
+    from datetime import date
+
+    print("=" * 70)
+    print("ORCHESTRATOR BACKTEST")
+    print("Historical Performance Analysis")
+    print("=" * 70)
+    print()
+
+    # Parse dates
+    if args.start:
+        start_date = date.fromisoformat(args.start)
+    else:
+        start_date = date.today() - timedelta(days=365)
+
+    if args.end:
+        end_date = date.fromisoformat(args.end)
+    else:
+        end_date = date.today()
+
+    # Get symbols
+    symbols = args.symbols if args.symbols else ["SPY"]
+
+    print(f"Symbols:     {', '.join(symbols)}")
+    print(f"Period:      {start_date} to {end_date}")
+    print(f"Capital:     ${args.capital:,.2f}")
+    print()
+
+    # Create config
+    config = BacktestConfig(
+        symbols=symbols,
+        start_date=start_date,
+        end_date=end_date,
+        initial_capital=args.capital,
+        bar_size="5 mins",
+        algorithm_name="Orchestrator",
+    )
+
+    # Get data
+    print("Loading historical data...")
+    data_provider = DataProvider()
+
+    requests = [
+        DataRequest(
+            symbol=s,
+            start_date=start_date,
+            end_date=end_date,
+            bar_size="5 mins",
+        )
+        for s in symbols
+    ]
+
+    def progress(pct, msg):
+        bars = int(pct * 40)
+        print(f"\r  [{('=' * bars).ljust(40)}] {pct*100:.0f}% {msg}", end="", flush=True)
+
+    data = data_provider.get_data(requests, progress)
+    print()
+
+    if not data:
+        print("\nNo historical data found. Generating sample data for testing...")
+        for s in symbols:
+            data[s] = data_provider.generate_sample_data(s, start_date, end_date, "5 mins")
+            print(f"  Generated {len(data[s])} bars for {s}")
+
+    # Create orchestrator and engine
+    print("\nRunning backtest...")
+    orchestrator = create_orchestrator()
+    engine = BacktestEngine(config, orchestrator)
+
+    # Run backtest
+    results = engine.run(data, progress)
+    print()
+
+    # Print results
+    m = results.metrics
+    print("\n" + "=" * 70)
+    print("BACKTEST RESULTS")
+    print("=" * 70)
+
+    pnl_color = "\033[92m" if m.net_profit >= 0 else "\033[91m"
+    reset = "\033[0m"
+
+    print(f"\n{'Performance Summary':^70}")
+    print("-" * 70)
+    print(f"  Total P&L:         {pnl_color}${m.net_profit:>15,.2f}{reset}")
+    print(f"  Total Return:      {pnl_color}{m.total_return_pct:>15.2f}%{reset}")
+    print(f"  Annualized Return: {pnl_color}{m.annualized_return:>15.2f}%{reset}")
+    print(f"  Sharpe Ratio:      {m.sharpe_ratio:>15.2f}")
+    print(f"  Sortino Ratio:     {m.sortino_ratio:>15.2f}")
+    print(f"  Max Drawdown:      \033[91m{m.max_drawdown_pct:>15.2f}%{reset}")
+
+    print(f"\n{'Trade Statistics':^70}")
+    print("-" * 70)
+    print(f"  Total Trades:      {m.total_trades:>15}")
+    print(f"  Winning Trades:    {m.winning_trades:>15}")
+    print(f"  Losing Trades:     {m.losing_trades:>15}")
+    print(f"  Win Rate:          {m.win_rate:>15.1f}%")
+    print(f"  Profit Factor:     {m.profit_factor:>15.2f}")
+    print(f"  Expectancy:        ${m.expectancy:>14.2f}")
+    print(f"  Avg Win:           ${m.avg_win:>14.2f}")
+    print(f"  Avg Loss:          ${m.avg_loss:>14.2f}")
+
+    print(f"\n{'Daily Performance':^70}")
+    print("-" * 70)
+    print(f"  Trading Days:      {len(results.daily_results):>15}")
+    print(f"  Avg Daily P&L:     ${m.avg_daily_pnl:>14.2f}")
+    print(f"  Best Day:          ${m.best_day:>14.2f}")
+    print(f"  Worst Day:         ${m.worst_day:>14.2f}")
+    print(f"  Win Streak:        {m.max_consecutive_wins:>15}")
+    print(f"  Loss Streak:       {m.max_consecutive_losses:>15}")
+
+    print("=" * 70)
+
+    # Export results if requested
+    if args.export:
+        print("\nExporting results...")
+        exporter = BacktestExporter()
+        export_path = exporter.export(results)
+        print(f"Results exported to: {export_path}")
+        print(f"  - summary.json")
+        print(f"  - trades.csv")
+        print(f"  - daily_pnl.csv")
+        print(f"  - equity_curve.csv")
+        print(f"  - metrics.json")
+        print(f"  - report.html")
+        if (export_path / "charts").exists():
+            print(f"  - charts/ (PNG images)")
+
+    print("\nBacktest complete!")
 
 
 if __name__ == "__main__":
