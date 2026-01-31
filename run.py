@@ -39,6 +39,7 @@ import argparse
 import signal
 import sys
 import time
+import threading
 from datetime import datetime, timedelta, time as dt_time
 from typing import Dict, List, Optional, Set
 
@@ -57,6 +58,18 @@ from trading_algo.stock_selector.ibkr_scanner import (
     IBKRStockScanner,
     DAY_TRADE_UNIVERSE,
 )
+
+# Dashboard imports (optional, graceful fallback if textual not installed)
+try:
+    from trading_algo.dashboard import (
+        TradingDashboard,
+        OrchestratorAdapter,
+        get_event_bus,
+        get_store,
+    )
+    DASHBOARD_AVAILABLE = True
+except ImportError:
+    DASHBOARD_AVAILABLE = False
 
 
 # Core reference assets (always loaded for market context)
@@ -128,6 +141,7 @@ class OrchestratorAutoTrader:
         dry_run: bool = False,
         max_position_dollars: float = 10000,
         rescan_interval: Optional[int] = None,
+        use_dashboard: bool = False,
     ):
         self.broker = broker
         self.initial_symbols = [s.upper() for s in symbols] if symbols else None
@@ -135,6 +149,7 @@ class OrchestratorAutoTrader:
         self.dry_run = dry_run
         self.max_position_dollars = max_position_dollars
         self.rescan_interval = rescan_interval
+        self.use_dashboard = use_dashboard and DASHBOARD_AVAILABLE
 
         # Will be set after scanning
         self.symbols: List[str] = []
@@ -157,6 +172,18 @@ class OrchestratorAutoTrader:
         self.running = False
         self._last_bar_time: Dict[str, datetime] = {}
         self._last_scan_time: Optional[datetime] = None
+
+        # Dashboard adapter
+        self.adapter: Optional[OrchestratorAdapter] = None
+        if self.use_dashboard:
+            self.adapter = OrchestratorAdapter()
+
+    def log(self, level: str, message: str):
+        """Log a message (to console and dashboard if available)."""
+        if self.adapter:
+            self.adapter.log(level, message)
+        else:
+            print(f"[{level}] {message}")
 
     def scan_for_movers(self) -> List[str]:
         """Scan for today's biggest movers."""
@@ -189,13 +216,17 @@ class OrchestratorAutoTrader:
         """Start the auto trader."""
         self.running = True
 
+        # Start dashboard adapter
+        if self.adapter:
+            self.adapter.start()
+
         # Get account value
         try:
             account = self.broker.get_account_snapshot()
             self.account_value = account.values.get('NetLiquidation', 100_000)
-            print(f"Account Value: ${self.account_value:,.2f}")
+            self.log("INFO", f"Account Value: ${self.account_value:,.2f}")
         except Exception as e:
-            print(f"Warning: Could not get account value: {e}")
+            self.log("WARNING", f"Could not get account value: {e}")
 
         # Determine symbols to trade
         if self.initial_symbols:
@@ -218,6 +249,8 @@ class OrchestratorAutoTrader:
     def stop(self):
         """Stop trading."""
         self.running = False
+        if self.adapter:
+            self.adapter.stop()
 
     def _warmup(self):
         """Warm up the orchestrator with recent data."""
@@ -355,9 +388,23 @@ class OrchestratorAutoTrader:
                     signals[symbol] = signal
                     self.signals_generated += 1
 
+                    # Emit to dashboard
+                    if self.adapter:
+                        self.adapter.on_orchestrator_signal(
+                            symbol=symbol,
+                            action=signal.action,
+                            price=signal.entry_price,
+                            stop_loss=signal.stop_loss,
+                            take_profit=signal.take_profit,
+                            confidence=signal.confidence,
+                            consensus_score=signal.consensus_score,
+                            edge_votes={k: v.name for k, v in signal.edge_votes.items()},
+                            reason=signal.reason,
+                        )
+
                     if signal.action != "hold":
                         self._print_signal(signal)
-                    else:
+                    elif not self.use_dashboard:
                         state = self.orchestrator.asset_states.get(symbol)
                         price = state.prices[-1] if state and state.prices else 0
                         regime = signal.market_regime.name if signal.market_regime else "?"
@@ -365,7 +412,10 @@ class OrchestratorAutoTrader:
                         print(f"  [{symbol}] ${price:.2f} | {regime} | HOLD: {reason}")
 
             except Exception as e:
-                print(f"  Error generating signal for {symbol}: {e}")
+                if self.adapter:
+                    self.adapter.error("SignalError", str(e))
+                else:
+                    print(f"  Error generating signal for {symbol}: {e}")
 
         return signals
 
@@ -545,10 +595,12 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python run_orchestrator_auto.py --dry-run              # Dry run with auto-selected stocks
-  python run_orchestrator_auto.py --top 5                # Trade top 5 movers
-  python run_orchestrator_auto.py --symbols GLD SIVR     # Trade specific symbols
-  python run_orchestrator_auto.py --rescan 60            # Rescan for movers every 60 min
+  python run.py --dry-run                    # Dry run with auto-selected stocks
+  python run.py --dashboard                  # Run with interactive dashboard
+  python run.py --top 5                      # Trade top 5 movers
+  python run.py --symbols GLD SIVR           # Trade specific symbols
+  python run.py --rescan 60                  # Rescan for movers every 60 min
+  python run.py --dashboard --dry-run        # Dashboard in dry-run mode
         """
     )
     parser.add_argument("--symbols", nargs="*", help="Specific symbols to trade (skips scanning)")
@@ -559,6 +611,7 @@ Examples:
     parser.add_argument("--max-position", type=float, default=10000, help="Max position size in dollars (default: 10000)")
     parser.add_argument("--rescan", type=int, help="Rescan for new movers every N minutes")
     parser.add_argument("--port", type=int, default=7497, help="IBKR port (default: 7497)")
+    parser.add_argument("--dashboard", action="store_true", help="Run with interactive TUI dashboard")
 
     args = parser.parse_args()
 
@@ -600,6 +653,13 @@ Examples:
         print(f"Failed: {e}")
         sys.exit(1)
 
+    # Check dashboard availability
+    if args.dashboard and not DASHBOARD_AVAILABLE:
+        print("\nWARNING: Dashboard requested but 'textual' is not installed.")
+        print("Install with: pip install textual")
+        print("Falling back to console mode.\n")
+        args.dashboard = False
+
     trader = OrchestratorAutoTrader(
         broker=broker,
         symbols=args.symbols,
@@ -607,6 +667,7 @@ Examples:
         dry_run=args.dry_run,
         max_position_dollars=args.max_position,
         rescan_interval=args.rescan,
+        use_dashboard=args.dashboard,
     )
 
     def signal_handler(sig, frame):
@@ -618,35 +679,12 @@ Examples:
     try:
         trader.start()
 
-        print("\n" + "=" * 70)
-        print("TRADING STARTED - Press Ctrl+C to stop")
-        print("=" * 70)
-
-        start_time = time.time()
-        update_count = 0
-
-        while trader.running:
-            if args.duration and (time.time() - start_time) >= args.duration:
-                print("\nDuration reached.")
-                break
-
-            # Check market hours
-            now = datetime.now().time()
-            if now >= dt_time(16, 5):
-                print("\nMarket closed. Auto-stopping.")
-                break
-
-            # Maybe rescan for new movers
-            trader.maybe_rescan()
-
-            signals = trader.update()
-            trader.execute(signals)
-
-            update_count += 1
-            if update_count % 4 == 0:
-                trader.print_status()
-
-            time.sleep(args.interval)
+        if args.dashboard:
+            # Run with dashboard UI
+            _run_with_dashboard(trader, broker, args)
+        else:
+            # Run in console mode
+            _run_console_mode(trader, broker, args)
 
     finally:
         trader.stop()
@@ -658,6 +696,93 @@ Examples:
         print(f"Total Signals: {trader.signals_generated}")
         print(f"Total Trades:  {trader.trades_executed}")
         print("=" * 70)
+
+
+def _run_console_mode(trader: OrchestratorAutoTrader, broker: IBKRBroker, args):
+    """Run in console mode (no dashboard)."""
+    print("\n" + "=" * 70)
+    print("TRADING STARTED - Press Ctrl+C to stop")
+    print("=" * 70)
+
+    start_time = time.time()
+    update_count = 0
+
+    while trader.running:
+        if args.duration and (time.time() - start_time) >= args.duration:
+            print("\nDuration reached.")
+            break
+
+        # Check market hours
+        now = datetime.now().time()
+        if now >= dt_time(16, 5):
+            print("\nMarket closed. Auto-stopping.")
+            break
+
+        # Maybe rescan for new movers
+        trader.maybe_rescan()
+
+        signals = trader.update()
+        trader.execute(signals)
+
+        update_count += 1
+        if update_count % 4 == 0:
+            trader.print_status()
+
+        time.sleep(args.interval)
+
+
+def _run_with_dashboard(trader: OrchestratorAutoTrader, broker: IBKRBroker, args):
+    """Run with interactive TUI dashboard."""
+    from trading_algo.dashboard import TradingDashboard, get_store
+
+    # Create trading loop thread
+    stop_event = threading.Event()
+
+    def trading_loop():
+        """Background trading loop."""
+        start_time = time.time()
+
+        while trader.running and not stop_event.is_set():
+            if args.duration and (time.time() - start_time) >= args.duration:
+                trader.log("INFO", "Duration reached. Stopping...")
+                trader.stop()
+                break
+
+            # Check market hours
+            now = datetime.now().time()
+            if now >= dt_time(16, 5):
+                trader.log("INFO", "Market closed. Auto-stopping.")
+                trader.stop()
+                break
+
+            try:
+                # Maybe rescan for new movers
+                trader.maybe_rescan()
+
+                # Update and execute
+                signals = trader.update()
+                trader.execute(signals)
+
+            except Exception as e:
+                if trader.adapter:
+                    trader.adapter.error("TradingLoop", str(e))
+
+            time.sleep(args.interval)
+
+    # Start trading in background thread
+    trading_thread = threading.Thread(target=trading_loop, daemon=True)
+    trading_thread.start()
+
+    # Run dashboard in main thread
+    try:
+        dashboard = TradingDashboard(
+            algorithm_name="Orchestrator Auto Trader",
+            store=get_store(),
+        )
+        dashboard.run()
+    finally:
+        stop_event.set()
+        trader.stop()
 
 
 if __name__ == "__main__":
