@@ -36,12 +36,23 @@ Usage:
 """
 
 import argparse
+import asyncio
+import atexit
+import os
 import signal
 import sys
 import time
 import threading
+import warnings
 from datetime import datetime, timedelta, time as dt_time
 from typing import Dict, List, Optional, Set
+
+# Suppress asyncio executor shutdown warning - we handle cleanup ourselves
+warnings.filterwarnings(
+    "ignore",
+    message=".*executor did not finishing joining.*",
+    category=RuntimeWarning
+)
 
 from trading_algo.broker.ibkr import IBKRBroker
 from trading_algo.broker.base import OrderRequest
@@ -602,6 +613,80 @@ class OrchestratorAutoTrader:
         print(f"  Regime:  {regime.name} ({conf:.0%})")
 
 
+def _force_cleanup(broker: IBKRBroker) -> None:
+    """Force cleanup of broker connection and event loop."""
+    try:
+        if broker._ib is not None:
+            # Force disconnect without waiting
+            broker._ib.disconnect()
+    except Exception:
+        pass
+
+    # Clean up asyncio event loop
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.stop()
+        # Cancel all pending tasks
+        for task in asyncio.all_tasks(loop):
+            task.cancel()
+        # Shutdown executor immediately without waiting
+        if hasattr(loop, '_default_executor') and loop._default_executor:
+            loop._default_executor.shutdown(wait=False, cancel_futures=True)
+        loop.close()
+    except Exception:
+        pass
+
+
+def _graceful_shutdown(trader: "OrchestratorAutoTrader", broker: IBKRBroker) -> None:
+    """Perform graceful shutdown with timeout."""
+    print("\nCleaning up...")
+
+    # Stop trader
+    try:
+        trader.stop()
+    except Exception as e:
+        print(f"  Warning: Error stopping trader: {e}")
+
+    # Disconnect broker with timeout
+    try:
+        # Use a thread with timeout for broker disconnect
+        disconnect_done = threading.Event()
+
+        def disconnect_broker():
+            try:
+                broker.disconnect()
+            except Exception:
+                pass
+            finally:
+                disconnect_done.set()
+
+        disconnect_thread = threading.Thread(target=disconnect_broker, daemon=True)
+        disconnect_thread.start()
+
+        # Wait max 3 seconds for disconnect
+        if not disconnect_done.wait(timeout=3.0):
+            print("  Broker disconnect timed out, forcing...")
+            _force_cleanup(broker)
+    except Exception as e:
+        print(f"  Warning: Error disconnecting broker: {e}")
+
+    # Clean up asyncio event loop executor
+    try:
+        loop = asyncio.get_event_loop()
+        if hasattr(loop, '_default_executor') and loop._default_executor:
+            loop._default_executor.shutdown(wait=False, cancel_futures=True)
+    except Exception:
+        pass
+
+    print("\n" + "=" * 70)
+    print("SESSION COMPLETE")
+    print("=" * 70)
+    print(f"Total Signals: {trader.signals_generated}")
+    print(f"Total Trades:  {trader.trades_executed}")
+    print("=" * 70)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Orchestrator Auto Trader - Automatic Stock Selection + Multi-Edge Trading",
@@ -697,11 +782,26 @@ Examples:
         use_dashboard=args.dashboard,
     )
 
+    # Track shutdown state for graceful exit
+    shutdown_state = {"count": 0, "in_progress": False}
+
     def signal_handler(sig, frame):
-        print("\n\nShutting down...")
-        trader.stop()
+        shutdown_state["count"] += 1
+
+        if shutdown_state["count"] == 1:
+            print("\n\nShutting down gracefully... (press Ctrl+C again to force)")
+            shutdown_state["in_progress"] = True
+            trader.stop()
+        elif shutdown_state["count"] == 2:
+            print("\nForcing shutdown...")
+            _force_cleanup(broker)
+            os._exit(1)
+        else:
+            # Third+ Ctrl+C - immediate hard exit
+            os._exit(1)
 
     signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
     try:
         trader.start()
@@ -714,15 +814,7 @@ Examples:
             _run_console_mode(trader, broker, args)
 
     finally:
-        trader.stop()
-        broker.disconnect()
-
-        print("\n" + "=" * 70)
-        print("SESSION COMPLETE")
-        print("=" * 70)
-        print(f"Total Signals: {trader.signals_generated}")
-        print(f"Total Trades:  {trader.trades_executed}")
-        print("=" * 70)
+        _graceful_shutdown(trader, broker)
 
 
 def _run_console_mode(trader: OrchestratorAutoTrader, broker: IBKRBroker, args):
@@ -748,14 +840,23 @@ def _run_console_mode(trader: OrchestratorAutoTrader, broker: IBKRBroker, args):
         # Maybe rescan for new movers
         trader.maybe_rescan()
 
-        signals = trader.update()
-        trader.execute(signals)
+        try:
+            signals = trader.update()
+            trader.execute(signals)
+        except Exception as e:
+            if not trader.running:
+                break  # Exit if we're shutting down
+            print(f"  Error in trading loop: {e}")
 
         update_count += 1
         if update_count % 4 == 0:
             trader.print_status()
 
-        time.sleep(args.interval)
+        # Use shorter sleep intervals to be more responsive to shutdown
+        for _ in range(args.interval):
+            if not trader.running:
+                break
+            time.sleep(1)
 
 
 def _run_with_dashboard(trader: OrchestratorAutoTrader, broker: IBKRBroker, args):
@@ -940,6 +1041,10 @@ def _run_with_dashboard(trader: OrchestratorAutoTrader, broker: IBKRBroker, args
     finally:
         stop_event.set()
         trader.stop()
+        # Wait for trading thread to finish with timeout
+        trading_thread.join(timeout=2.0)
+        if trading_thread.is_alive():
+            print("  Trading thread did not stop in time")
 
 
 def _run_backtest(args):
@@ -1099,9 +1204,24 @@ def _run_backtest(args):
         print("\nBacktest complete!")
 
     finally:
-        # Always disconnect from IBKR
+        # Always disconnect from IBKR with timeout
         print("\nDisconnecting from IBKR...")
-        broker.disconnect()
+        disconnect_done = threading.Event()
+
+        def disconnect_broker():
+            try:
+                broker.disconnect()
+            except Exception:
+                pass
+            finally:
+                disconnect_done.set()
+
+        disconnect_thread = threading.Thread(target=disconnect_broker, daemon=True)
+        disconnect_thread.start()
+
+        if not disconnect_done.wait(timeout=3.0):
+            print("  Disconnect timed out, forcing cleanup...")
+            _force_cleanup(broker)
 
 
 if __name__ == "__main__":
