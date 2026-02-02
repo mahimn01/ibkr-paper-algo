@@ -762,65 +762,129 @@ def _run_with_dashboard(trader: OrchestratorAutoTrader, broker: IBKRBroker, args
     """Run with interactive TUI dashboard."""
     from trading_algo.dashboard import TradingDashboard, get_store
 
-    # Create backtest callback for dashboard
+    # Flag to pause trading during backtest (IBKR doesn't support concurrent access)
+    backtest_running = threading.Event()
+
+    # Create backtest callback for dashboard (uses IBKR for real data)
     async def run_backtest_callback(config: dict, progress_callback) -> "BacktestResults":
-        """Callback for running backtests from dashboard."""
+        """Callback for running backtests from dashboard using IBKR data.
+
+        Pauses the trading loop and reuses the existing broker connection
+        since IBKR only allows limited concurrent connections.
+
+        IMPORTANT: All blocking IBKR calls run in a thread to avoid freezing textual's UI.
+        """
+        import asyncio
+
         if not BACKTEST_AVAILABLE:
             raise RuntimeError("Backtest module not available")
 
+        # Use the existing broker connection
+        if not broker or broker._ib is None:
+            raise RuntimeError("IBKR broker not connected. Cannot fetch historical data.")
+
+        # Signal trading loop to pause
+        progress_callback(0.01, "Pausing live trading for backtest...")
+        backtest_running.set()
+        await asyncio.sleep(1)  # Non-blocking sleep
+
         from datetime import date
 
-        # Create backtest config
+        # Reference assets required by Orchestrator for regime detection
+        REFERENCE_ASSETS = ["SPY", "QQQ", "IWM"]
+
+        # Trading symbols (what user selected)
+        trading_symbols = config.get("symbols", [])
+        if not trading_symbols:
+            backtest_running.clear()
+            raise RuntimeError("No symbols specified for backtest")
+
+        # All symbols needed (trading + reference)
+        all_symbols = list(set(trading_symbols + REFERENCE_ASSETS))
+
+        # For long date ranges, use daily bars (much faster to fetch)
+        days_requested = (config["end_date"] - config["start_date"]).days
+        if days_requested > 30:
+            bar_size = "1 day"  # Use daily for long backtests
+            progress_callback(0.05, f"Using daily bars for {days_requested}-day backtest (faster)...")
+        else:
+            bar_size = config["bar_size"]
+            progress_callback(0.05, f"Preparing backtest for {', '.join(trading_symbols)}...")
+
+        # Create backtest config (only trading symbols count for positions)
         bt_config = BacktestConfig(
-            symbols=config["symbols"],
+            symbols=trading_symbols,
             start_date=config["start_date"],
             end_date=config["end_date"],
             initial_capital=config["initial_capital"],
-            bar_size=config["bar_size"],
+            bar_size=bar_size,
             strategy_name="Orchestrator",
         )
 
-        # Get data
-        data_provider = DataProvider()
-        progress_callback(0.1, "Fetching historical data...")
+        # Fetch data for each symbol
+        # NOTE: ib_insync has thread affinity - must be called from same thread
+        # So we call blocking code directly (UI may freeze briefly during IBKR calls)
+        try:
+            data = {}
+            total_symbols = len(all_symbols)
 
-        requests = [
-            DataRequest(
-                symbol=s,
-                start_date=config["start_date"],
-                end_date=config["end_date"],
-                bar_size=config["bar_size"],
-            )
-            for s in config["symbols"]
-        ]
+            for idx, symbol in enumerate(all_symbols):
+                pct = 0.1 + (idx / total_symbols) * 0.3
+                progress_callback(pct, f"Fetching {symbol} ({idx+1}/{total_symbols})...")
+                await asyncio.sleep(0)  # Yield to event loop for UI update
 
-        data = data_provider.get_data(
-            requests,
-            lambda pct, msg: progress_callback(0.1 + pct * 0.4, msg),
-        )
+                try:
+                    data_provider = DataProvider(broker=broker)
+                    requests = [DataRequest(
+                        symbol=symbol,
+                        start_date=config["start_date"],
+                        end_date=config["end_date"],
+                        bar_size=bar_size,
+                    )]
+                    symbol_data = data_provider.get_data(requests)
+                    if symbol in symbol_data and symbol_data[symbol]:
+                        data[symbol] = symbol_data[symbol]
+                        progress_callback(pct + 0.05, f"Got {len(data[symbol])} bars for {symbol}")
+                except Exception as e:
+                    progress_callback(pct, f"Error: {symbol}: {e}")
+                    print(f"Error fetching {symbol}: {e}")
 
-        if not data:
-            # Use sample data if no real data
-            progress_callback(0.2, "No data found, generating sample data...")
-            for s in config["symbols"]:
-                data[s] = data_provider.generate_sample_data(
-                    s,
-                    config["start_date"],
-                    config["end_date"],
-                    config["bar_size"],
+            # Check for missing data
+            progress_callback(0.45, "Validating data...")
+            await asyncio.sleep(0)
+            missing = [s for s in all_symbols if s not in data or not data[s]]
+
+            if not data or all(not bars for bars in data.values()):
+                raise RuntimeError(
+                    f"No data fetched from IBKR. Make sure TWS/Gateway is connected. "
+                    f"Missing symbols: {', '.join(missing) if missing else 'all'}"
                 )
 
-        # Create orchestrator for backtest
-        progress_callback(0.5, "Running backtest...")
-        test_orchestrator = create_orchestrator()
+            if missing:
+                progress_callback(0.47, f"Warning: Missing {', '.join(missing)}")
 
-        # Create engine
-        engine = BacktestEngine(bt_config)
+            # Create orchestrator for backtest
+            progress_callback(0.5, "Creating Orchestrator strategy...")
+            await asyncio.sleep(0)
+            test_orchestrator = create_orchestrator()
 
-        # Run backtest
-        results = engine.run(test_orchestrator, data, lambda pct, msg: progress_callback(0.5 + pct * 0.5, msg))
+            # Create engine and run backtest
+            progress_callback(0.55, "Running backtest simulation...")
+            await asyncio.sleep(0)
+            engine = BacktestEngine(bt_config)
+            results = engine.run(
+                test_orchestrator,
+                data,
+                lambda pct, msg: progress_callback(0.55 + pct * 0.4, msg)
+            )
 
-        return results
+            progress_callback(0.95, "Backtest complete!")
+            return results
+
+        finally:
+            # Resume trading loop
+            progress_callback(0.99, "Resuming live trading...")
+            backtest_running.clear()
 
     # Create trading loop thread
     stop_event = threading.Event()
@@ -830,6 +894,11 @@ def _run_with_dashboard(trader: OrchestratorAutoTrader, broker: IBKRBroker, args
         start_time = time.time()
 
         while trader.running and not stop_event.is_set():
+            # Pause if backtest is running (IBKR doesn't support concurrent access)
+            if backtest_running.is_set():
+                time.sleep(0.5)
+                continue
+
             if args.duration and (time.time() - start_time) >= args.duration:
                 trader.log("INFO", "Duration reached. Stopping...")
                 trader.stop()
@@ -874,7 +943,7 @@ def _run_with_dashboard(trader: OrchestratorAutoTrader, broker: IBKRBroker, args
 
 
 def _run_backtest(args):
-    """Run backtest mode."""
+    """Run backtest mode using real IBKR historical data."""
     if not BACKTEST_AVAILABLE:
         print("ERROR: Backtest module not available.")
         print("Make sure trading_algo/backtest_v2 exists.")
@@ -884,117 +953,136 @@ def _run_backtest(args):
 
     print("=" * 70)
     print("ORCHESTRATOR BACKTEST")
-    print("Historical Performance Analysis")
+    print("Historical Performance Analysis (IBKR Real Data)")
     print("=" * 70)
     print()
 
-    # Parse dates
-    if args.start:
-        start_date = date.fromisoformat(args.start)
-    else:
-        start_date = date.today() - timedelta(days=365)
+    # Connect to IBKR for historical data
+    print("Connecting to IBKR for historical data...")
+    config_ibkr = IBKRConfig(host="127.0.0.1", port=args.port, client_id=51)
+    broker = IBKRBroker(config=config_ibkr, require_paper=False)
 
-    if args.end:
-        end_date = date.fromisoformat(args.end)
-    else:
-        end_date = date.today()
+    try:
+        broker.connect()
+        print("Connected to IBKR!")
+    except Exception as e:
+        print(f"ERROR: Could not connect to IBKR: {e}")
+        print("\nBacktest requires IBKR connection for real historical data.")
+        print("Make sure TWS or IB Gateway is running.")
+        sys.exit(1)
 
-    # Get symbols
-    symbols = args.symbols if args.symbols else ["SPY"]
+    try:
+        # Parse dates
+        if args.start:
+            start_date = date.fromisoformat(args.start)
+        else:
+            start_date = date.today() - timedelta(days=365)
 
-    print(f"Symbols:     {', '.join(symbols)}")
-    print(f"Period:      {start_date} to {end_date}")
-    print(f"Capital:     ${args.capital:,.2f}")
-    print()
+        if args.end:
+            end_date = date.fromisoformat(args.end)
+        else:
+            end_date = date.today()
 
-    # Create config
-    config = BacktestConfig(
-        strategy_name="Orchestrator",
-        symbols=symbols,
-        start_date=start_date,
-        end_date=end_date,
-        initial_capital=args.capital,
-        bar_size="5 mins",
-    )
+        # Get symbols
+        trading_symbols = args.symbols if args.symbols else ["SPY"]
 
-    # Get data
-    print("Loading historical data...")
-    data_provider = DataProvider()
+        # Reference assets required by Orchestrator for regime detection
+        REFERENCE_ASSETS = ["SPY", "QQQ", "IWM"]
+        all_symbols = list(set(trading_symbols + REFERENCE_ASSETS))
 
-    requests = [
-        DataRequest(
-            symbol=s,
+        print(f"\nTrading:     {', '.join(trading_symbols)}")
+        print(f"Reference:   {', '.join([s for s in REFERENCE_ASSETS if s not in trading_symbols])}")
+        print(f"Period:      {start_date} to {end_date}")
+        print(f"Capital:     ${args.capital:,.2f}")
+        print()
+
+        # Create config (only trading symbols for position management)
+        config = BacktestConfig(
+            strategy_name="Orchestrator",
+            symbols=trading_symbols,
             start_date=start_date,
             end_date=end_date,
+            initial_capital=args.capital,
             bar_size="5 mins",
         )
-        for s in symbols
-    ]
 
-    def progress(pct, msg):
-        bars = int(pct * 40)
-        print(f"\r  [{('=' * bars).ljust(40)}] {pct*100:.0f}% {msg}", end="", flush=True)
+        # Get data for ALL symbols from IBKR (trading + reference)
+        print("Fetching real historical data from IBKR...")
+        data_provider = DataProvider(broker=broker)
 
-    data = data_provider.get_data(requests, progress)
-    print()
+        requests = [
+            DataRequest(
+                symbol=s,
+                start_date=start_date,
+                end_date=end_date,
+                bar_size="5 mins",
+            )
+            for s in all_symbols
+        ]
 
-    if not data:
-        print("\nNo historical data found. Generating sample data for testing...")
-        for s in symbols:
-            data[s] = data_provider.generate_sample_data(s, start_date, end_date, "5 mins")
-            print(f"  Generated {len(data[s])} bars for {s}")
+        def progress(pct, msg):
+            bars = int(pct * 40)
+            print(f"\r  [{('=' * bars).ljust(40)}] {pct*100:.0f}% {msg}", end="", flush=True)
 
-    # Create orchestrator and engine
-    print("\nRunning backtest...")
-    orchestrator = create_orchestrator()
-    engine = BacktestEngine(config)
+        data = data_provider.get_data(requests, progress)
+        print()
 
-    # Run backtest
-    results = engine.run(orchestrator, data, progress)
-    print()
+        # Check for missing data (DO NOT use sample data)
+        missing = [s for s in all_symbols if s not in data or not data[s]]
+        if missing:
+            print(f"\nWARNING: Could not fetch data for: {', '.join(missing)}")
+            print("This may affect backtest accuracy if reference assets are missing.")
 
-    # Print results
-    m = results.metrics
-    print("\n" + "=" * 70)
-    print("BACKTEST RESULTS")
-    print("=" * 70)
+        # Create orchestrator and engine
+        print("\nRunning backtest...")
+        orchestrator = create_orchestrator()
+        engine = BacktestEngine(config)
 
-    pnl_color = "\033[92m" if m.net_profit >= 0 else "\033[91m"
-    reset = "\033[0m"
+        # Run backtest
+        results = engine.run(orchestrator, data, progress)
+        print()
 
-    print(f"\n{'Performance Summary':^70}")
-    print("-" * 70)
-    print(f"  Total P&L:         {pnl_color}${m.net_profit:>15,.2f}{reset}")
-    print(f"  Total Return:      {pnl_color}{m.total_return_pct:>15.2f}%{reset}")
-    print(f"  Annualized Return: {pnl_color}{m.annualized_return:>15.2f}%{reset}")
-    print(f"  Sharpe Ratio:      {m.sharpe_ratio:>15.2f}")
-    print(f"  Sortino Ratio:     {m.sortino_ratio:>15.2f}")
-    print(f"  Max Drawdown:      \033[91m{m.max_drawdown_pct:>15.2f}%{reset}")
+        # Print results
+        m = results.metrics
+        print("\n" + "=" * 70)
+        print("BACKTEST RESULTS")
+        print("=" * 70)
 
-    print(f"\n{'Trade Statistics':^70}")
-    print("-" * 70)
-    print(f"  Total Trades:      {m.total_trades:>15}")
-    print(f"  Winning Trades:    {m.winning_trades:>15}")
-    print(f"  Losing Trades:     {m.losing_trades:>15}")
-    print(f"  Win Rate:          {m.win_rate:>15.1f}%")
-    print(f"  Profit Factor:     {m.profit_factor:>15.2f}")
-    print(f"  Expectancy:        ${m.expectancy:>14.2f}")
-    print(f"  Avg Win:           ${m.avg_win:>14.2f}")
-    print(f"  Avg Loss:          ${m.avg_loss:>14.2f}")
+        pnl_color = "\033[92m" if m.net_profit >= 0 else "\033[91m"
+        reset = "\033[0m"
 
-    print(f"\n{'Daily Performance':^70}")
-    print("-" * 70)
-    print(f"  Trading Days:      {len(results.daily_results):>15}")
-    print(f"  Avg Daily P&L:     ${m.avg_daily_pnl:>14.2f}")
-    print(f"  Best Day:          ${m.best_day:>14.2f}")
-    print(f"  Worst Day:         ${m.worst_day:>14.2f}")
-    print(f"  Win Streak:        {m.max_consecutive_wins:>15}")
-    print(f"  Loss Streak:       {m.max_consecutive_losses:>15}")
+        print(f"\n{'Performance Summary':^70}")
+        print("-" * 70)
+        print(f"  Total P&L:         {pnl_color}${m.net_profit:>15,.2f}{reset}")
+        print(f"  Total Return:      {pnl_color}{m.total_return_pct:>15.2f}%{reset}")
+        print(f"  Annualized Return: {pnl_color}{m.annualized_return:>15.2f}%{reset}")
+        print(f"  Sharpe Ratio:      {m.sharpe_ratio:>15.2f}")
+        print(f"  Sortino Ratio:     {m.sortino_ratio:>15.2f}")
+        print(f"  Max Drawdown:      \033[91m{m.max_drawdown_pct:>15.2f}%{reset}")
 
-    print("=" * 70)
+        print(f"\n{'Trade Statistics':^70}")
+        print("-" * 70)
+        print(f"  Total Trades:      {m.total_trades:>15}")
+        print(f"  Winning Trades:    {m.winning_trades:>15}")
+        print(f"  Losing Trades:     {m.losing_trades:>15}")
+        print(f"  Win Rate:          {m.win_rate:>15.1f}%")
+        print(f"  Profit Factor:     {m.profit_factor:>15.2f}")
+        print(f"  Expectancy:        ${m.expectancy:>14.2f}")
+        print(f"  Avg Win:           ${m.avg_win:>14.2f}")
+        print(f"  Avg Loss:          ${m.avg_loss:>14.2f}")
 
-    # Export results if requested
-    if args.export:
+        print(f"\n{'Daily Performance':^70}")
+        print("-" * 70)
+        print(f"  Trading Days:      {len(results.daily_results):>15}")
+        print(f"  Avg Daily P&L:     ${m.avg_daily_pnl:>14.2f}")
+        print(f"  Best Day:          ${m.best_day:>14.2f}")
+        print(f"  Worst Day:         ${m.worst_day:>14.2f}")
+        print(f"  Win Streak:        {m.max_consecutive_wins:>15}")
+        print(f"  Loss Streak:       {m.max_consecutive_losses:>15}")
+
+        print("=" * 70)
+
+        # Export results (always export for analysis)
         print("\nExporting results...")
         exporter = BacktestExporter()
         export_path = exporter.export(results)
@@ -1008,7 +1096,12 @@ def _run_backtest(args):
         if (export_path / "charts").exists():
             print(f"  - charts/ (PNG images)")
 
-    print("\nBacktest complete!")
+        print("\nBacktest complete!")
+
+    finally:
+        # Always disconnect from IBKR
+        print("\nDisconnecting from IBKR...")
+        broker.disconnect()
 
 
 if __name__ == "__main__":

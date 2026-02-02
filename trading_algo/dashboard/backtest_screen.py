@@ -525,18 +525,44 @@ class BacktestScreen(Screen):
             capital_input = self.query_one("#capital-input", Input)
             bar_select = self.query_one("#bar-size-select", Select)
 
-            symbols = [s.strip() for s in symbols_input.value.split(",")]
+            # Validate symbols
+            symbols_text = symbols_input.value.strip()
+            if not symbols_text:
+                self.notify("Please enter at least one symbol", severity="error")
+                return
+            symbols = [s.strip().upper() for s in symbols_text.split(",") if s.strip()]
+            if not symbols:
+                self.notify("Please enter at least one symbol", severity="error")
+                return
+
+            # Validate dates
+            if not start_input.value or not end_input.value:
+                self.notify("Please enter start and end dates", severity="error")
+                return
             start_date = date.fromisoformat(start_input.value)
             end_date = date.fromisoformat(end_input.value)
-            initial_capital = float(capital_input.value)
-            bar_size = bar_select.value
+            if start_date >= end_date:
+                self.notify("Start date must be before end date", severity="error")
+                return
+
+            # Validate capital
+            initial_capital = float(capital_input.value or "100000")
+            if initial_capital <= 0:
+                self.notify("Capital must be positive", severity="error")
+                return
+
+            # Get bar size (default to "5 mins" if not selected)
+            bar_size = bar_select.value if bar_select.value else "5 mins"
+            # Handle SelectionType.NoSelection
+            if hasattr(bar_size, 'value'):
+                bar_size = "5 mins"
 
             config = {
                 "symbols": symbols,
                 "start_date": start_date,
                 "end_date": end_date,
                 "initial_capital": initial_capital,
-                "bar_size": bar_size,
+                "bar_size": str(bar_size),
             }
 
             # Update progress panel

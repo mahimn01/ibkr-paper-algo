@@ -101,7 +101,7 @@ class BacktestExporter:
                 "initial_capital": results.config.initial_capital,
                 "commission_per_share": results.config.commission_per_share,
                 "slippage_pct": results.config.slippage_pct,
-                "max_position_size": results.config.max_position_size,
+                "max_positions": results.config.max_positions,
                 "bar_size": results.config.bar_size,
             },
             "metrics": self._metrics_to_dict(results.metrics),
@@ -121,10 +121,11 @@ class BacktestExporter:
             return
 
         fieldnames = [
-            "trade_id", "symbol", "direction", "entry_time", "exit_time",
-            "entry_price", "exit_price", "quantity", "pnl", "pnl_pct",
-            "commission", "slippage", "hold_time_minutes", "mae", "mfe",
-            "mae_pct", "mfe_pct", "exit_reason", "signal_strength",
+            "id", "symbol", "direction", "entry_time", "exit_time",
+            "entry_price", "exit_price", "quantity", "net_pnl", "pnl_percent",
+            "gross_pnl", "commission", "slippage", "duration_minutes", "bars_held",
+            "max_adverse_excursion", "max_favorable_excursion",
+            "exit_reason", "signal_confidence", "market_regime",
         ]
 
         with open(path / "trades.csv", "w", newline="") as f:
@@ -132,12 +133,8 @@ class BacktestExporter:
             writer.writeheader()
 
             for trade in results.trades:
-                hold_time = 0
-                if trade.exit_time and trade.entry_time:
-                    hold_time = (trade.exit_time - trade.entry_time).total_seconds() / 60
-
                 row = {
-                    "trade_id": trade.trade_id,
+                    "id": trade.id,
                     "symbol": trade.symbol,
                     "direction": trade.direction,
                     "entry_time": trade.entry_time.isoformat() if trade.entry_time else "",
@@ -145,17 +142,18 @@ class BacktestExporter:
                     "entry_price": round(trade.entry_price, 4),
                     "exit_price": round(trade.exit_price, 4) if trade.exit_price else "",
                     "quantity": trade.quantity,
-                    "pnl": round(trade.pnl, 2) if trade.pnl else 0,
-                    "pnl_pct": round(trade.pnl_pct * 100, 4) if trade.pnl_pct else 0,
+                    "net_pnl": round(trade.net_pnl, 2),
+                    "pnl_percent": round(trade.pnl_percent, 4),
+                    "gross_pnl": round(trade.gross_pnl, 2),
                     "commission": round(trade.commission, 2),
                     "slippage": round(trade.slippage, 2),
-                    "hold_time_minutes": round(hold_time, 1),
-                    "mae": round(trade.mae, 2) if trade.mae else 0,
-                    "mfe": round(trade.mfe, 2) if trade.mfe else 0,
-                    "mae_pct": round(trade.mae_pct * 100, 4) if trade.mae_pct else 0,
-                    "mfe_pct": round(trade.mfe_pct * 100, 4) if trade.mfe_pct else 0,
+                    "duration_minutes": trade.duration_minutes,
+                    "bars_held": trade.bars_held,
+                    "max_adverse_excursion": round(trade.max_adverse_excursion, 2),
+                    "max_favorable_excursion": round(trade.max_favorable_excursion, 2),
                     "exit_reason": trade.exit_reason or "",
-                    "signal_strength": round(trade.signal_strength, 2) if trade.signal_strength else "",
+                    "signal_confidence": round(trade.signal_confidence, 2),
+                    "market_regime": trade.market_regime,
                 }
                 writer.writerow(row)
 
@@ -165,11 +163,10 @@ class BacktestExporter:
             return
 
         fieldnames = [
-            "date", "pnl", "pnl_pct", "trades", "winners", "losers",
-            "win_rate", "gross_profit", "gross_loss", "largest_win",
-            "largest_loss", "avg_win", "avg_loss", "profit_factor",
+            "date", "net_pnl", "return_pct", "trades_taken", "trades_won",
+            "trades_lost", "win_rate", "gross_pnl", "commissions",
             "starting_equity", "ending_equity", "max_drawdown",
-            "max_drawdown_pct",
+            "max_drawdown_pct", "market_regime",
         ]
 
         with open(path / "daily_pnl.csv", "w", newline="") as f:
@@ -177,31 +174,21 @@ class BacktestExporter:
             writer.writeheader()
 
             for day in results.daily_results:
-                total_trades = day.winners + day.losers
-                win_rate = day.winners / total_trades if total_trades > 0 else 0
-                avg_win = day.gross_profit / day.winners if day.winners > 0 else 0
-                avg_loss = day.gross_loss / day.losers if day.losers > 0 else 0
-                profit_factor = abs(day.gross_profit / day.gross_loss) if day.gross_loss != 0 else float('inf')
-
                 row = {
                     "date": day.date.isoformat(),
-                    "pnl": round(day.pnl, 2),
-                    "pnl_pct": round(day.pnl_pct * 100, 4),
-                    "trades": total_trades,
-                    "winners": day.winners,
-                    "losers": day.losers,
-                    "win_rate": round(win_rate * 100, 2),
-                    "gross_profit": round(day.gross_profit, 2),
-                    "gross_loss": round(day.gross_loss, 2),
-                    "largest_win": round(day.largest_win, 2),
-                    "largest_loss": round(day.largest_loss, 2),
-                    "avg_win": round(avg_win, 2),
-                    "avg_loss": round(avg_loss, 2),
-                    "profit_factor": round(profit_factor, 2) if profit_factor != float('inf') else "inf",
+                    "net_pnl": round(day.net_pnl, 2),
+                    "return_pct": round(day.return_pct, 4),
+                    "trades_taken": day.trades_taken,
+                    "trades_won": day.trades_won,
+                    "trades_lost": day.trades_lost,
+                    "win_rate": round(day.win_rate, 2),
+                    "gross_pnl": round(day.gross_pnl, 2),
+                    "commissions": round(day.commissions, 2),
                     "starting_equity": round(day.starting_equity, 2),
                     "ending_equity": round(day.ending_equity, 2),
                     "max_drawdown": round(day.max_drawdown, 2),
                     "max_drawdown_pct": round(day.max_drawdown_pct * 100, 4),
+                    "market_regime": day.market_regime,
                 }
                 writer.writerow(row)
 
@@ -240,18 +227,8 @@ class BacktestExporter:
 
     def _export_config_json(self, results: BacktestResults, path: Path) -> None:
         """Export backtest configuration to JSON."""
-        data = {
-            "symbols": results.config.symbols,
-            "start_date": results.config.start_date.isoformat(),
-            "end_date": results.config.end_date.isoformat(),
-            "initial_capital": results.config.initial_capital,
-            "commission_per_share": results.config.commission_per_share,
-            "slippage_pct": results.config.slippage_pct,
-            "max_position_size": results.config.max_position_size,
-            "bar_size": results.config.bar_size,
-            "algorithm_name": results.config.strategy_name,
-            "algorithm_params": results.config.algorithm_params,
-        }
+        # Use the config's built-in to_dict method for consistency
+        data = results.config.to_dict()
 
         with open(path / "config.json", "w") as f:
             json.dump(data, f, indent=2)
@@ -834,7 +811,7 @@ class BacktestExporter:
                 </div>
                 <div class="config-item">
                     <span class="metric-label">Max Position:</span><br>
-                    <strong>{config.max_position_size} shares</strong>
+                    <strong>{config.max_positions} shares</strong>
                 </div>
                 <div class="config-item">
                     <span class="metric-label">Bar Size:</span><br>
@@ -899,6 +876,7 @@ class BacktestExporter:
     def _format_trade_row(self, trade: BacktestTrade) -> str:
         """Format a trade as an HTML table row."""
         pnl_class = "positive" if trade.net_pnl > 0 else "negative"
+        exit_price = trade.exit_price if trade.exit_price else 0
         return f"""
             <tr>
                 <td>{trade.symbol}</td>
@@ -906,7 +884,7 @@ class BacktestExporter:
                 <td>{trade.entry_time.strftime('%Y-%m-%d %H:%M') if trade.entry_time else ''}</td>
                 <td>{trade.exit_time.strftime('%Y-%m-%d %H:%M') if trade.exit_time else ''}</td>
                 <td>${trade.entry_price:.2f}</td>
-                <td>${trade.exit_price:.2f if trade.exit_price else 0:.2f}</td>
+                <td>${exit_price:.2f}</td>
                 <td>{trade.quantity}</td>
                 <td class="{pnl_class}">${trade.net_pnl:.2f}</td>
                 <td class="{pnl_class}">{trade.pnl_percent:.2f}%</td>

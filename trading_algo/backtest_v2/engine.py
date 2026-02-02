@@ -257,9 +257,10 @@ class BacktestEngine:
             if not is_warmup:
                 self._start_day(bar_date)
 
-        # Update strategy with all available bars
-        for symbol in self.config.symbols:
-            if symbol in bar_lookup and timestamp in bar_lookup[symbol]:
+        # Update strategy with ALL available bars (including reference assets like SPY, QQQ)
+        # This is crucial for strategies that need market context (regime detection, etc.)
+        for symbol in bar_lookup.keys():
+            if timestamp in bar_lookup[symbol]:
                 bar = bar_lookup[symbol][timestamp]
                 strategy.update_asset(
                     symbol=symbol,
