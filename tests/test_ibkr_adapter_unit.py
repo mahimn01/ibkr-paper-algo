@@ -205,7 +205,10 @@ class TestIBKRAdapterUnit(unittest.TestCase):
             order_type="MKT",
         )
         broker.place_order(fut_req)
-        _, fut_contract = broker._ib.calls[-3]  # qualify
+        # Find the qualify call for the futures contract
+        qualify_calls = [c for c in broker._ib.calls if c[0] == "qualify"]
+        self.assertGreaterEqual(len(qualify_calls), 1)
+        _, fut_contract = qualify_calls[-1]
         self.assertEqual(fut_contract.kind, "FUT")
         self.assertEqual(fut_contract.symbol, "ES")
         self.assertEqual(fut_contract.exchange, "CME")
@@ -213,7 +216,10 @@ class TestIBKRAdapterUnit(unittest.TestCase):
 
         fx_req = OrderRequest(instrument=InstrumentSpec(kind="FX", symbol="EURUSD"), side="BUY", quantity=1, order_type="MKT")
         broker.place_order(fx_req)
-        _, fx_contract = broker._ib.calls[-3]  # qualify
+        # Find the qualify call for the FX contract
+        qualify_calls = [c for c in broker._ib.calls if c[0] == "qualify"]
+        self.assertGreaterEqual(len(qualify_calls), 2)
+        _, fx_contract = qualify_calls[-1]
         self.assertEqual(fx_contract.kind, "FX")
         self.assertEqual(fx_contract.pair, "EURUSD")
 
@@ -226,7 +232,10 @@ class TestIBKRAdapterUnit(unittest.TestCase):
             order_type="MKT",
         )
         broker.place_order(opt_req)
-        _, opt_contract = broker._ib.calls[-3]  # qualify
+        # Find the qualify call for the option contract
+        qualify_calls = [c for c in broker._ib.calls if c[0] == "qualify"]
+        self.assertGreaterEqual(len(qualify_calls), 1)
+        _, opt_contract = qualify_calls[-1]
         self.assertEqual(opt_contract.kind, "OPT")
         self.assertEqual(opt_contract.symbol, "AAPL")
         self.assertEqual(opt_contract.lastTradeDateOrContractMonth, "20260116")
