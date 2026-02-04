@@ -1,0 +1,71 @@
+{
+    "name": "Quant Core Strategy",
+    "version": "2.0",
+
+    "universe": [
+        "SPY", "QQQ", "IWM", "DIA",
+        "AAPL", "MSFT", "GOOGL", "AMZN", "META",
+        "NVDA", "AMD", "TSLA"
+    ],
+    "benchmark": "SPY",
+
+    "initial_capital": 100000,
+    "warmup_bars": 60,
+    "rebalance_frequency": "daily",
+    "data_path": "./data",
+
+    "signal": {
+        "ou_weight": 0.25,
+        "tsmom_weight": 0.25,
+        "vol_mom_weight": 0.25,
+        "ml_weight": 0.25,
+        "regime_scaling": true,
+        "crisis_exposure_mult": 0.25,
+        "use_ml_combination": true,
+        "ou_lookback": 60,
+        "ou_entry_threshold": 1.25,
+        "momentum_lookback": 252,
+        "vol_target": 0.15
+    },
+
+    "risk": {
+        "max_position_pct": 0.10,
+        "max_sector_pct": 0.30,
+        "max_gross_exposure": 1.0,
+        "max_net_exposure": 0.50,
+        "max_drawdown": 0.15,
+        "drawdown_warning": 0.10,
+        "daily_loss_limit": 0.03,
+        "var_limit_95": 0.02,
+        "es_limit_95": 0.03,
+        "max_portfolio_vol": 0.20,
+        "vol_target": 0.15
+    },
+
+    "portfolio": {
+        "sizing_method": "KELLY",
+        "kelly_fraction": 0.25,
+        "target_volatility": 0.15,
+        "min_weight": 0.01,
+        "max_weight": 0.10,
+        "max_gross_exposure": 1.0,
+        "allow_shorting": true,
+        "min_trade_value": 1000,
+        "min_rebalance_threshold": 0.02,
+        "max_turnover": 0.50
+    },
+
+    "execution": {
+        "method": "ALMGREN_CHRISS",
+        "horizon_minutes": 30,
+        "default_urgency": "NEUTRAL",
+        "max_slippage_bps": 50
+    },
+
+    "ibkr": {
+        "host": "127.0.0.1",
+        "paper_port": 7497,
+        "live_port": 7496,
+        "client_id": 1
+    }
+}
