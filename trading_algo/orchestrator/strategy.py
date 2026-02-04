@@ -64,11 +64,17 @@ class Orchestrator:
 
         # Current positions
         self.positions: Dict[str, dict] = {}
+        self.last_exit_bar_index: Dict[str, int] = {}
 
         # Settings
         self.min_consensus_edges = 4  # At least 4 edges must agree
         self.min_consensus_score = 0.5  # Minimum weighted score
         self.max_position_pct = 0.03  # 3% of account max
+        self.min_reentry_bars = 12  # Cooldown after an exit to reduce churn
+        self.min_regime_confidence = 0.5
+        self.min_atr_pct = 0.0015  # Avoid low-range chop
+        self.max_atr_pct = 0.03    # Avoid panic volatility
+        self.max_opposition_score = 0.35
         self.atr_stop_mult = 2.5
         self.atr_target_mult = 4.0
 
@@ -176,10 +182,38 @@ class Orchestrator:
                                     "Warming up")
 
         price = state.prices[-1]
+        current_bar = len(state.prices)
 
         # Check existing position
         if symbol in self.positions:
             return self._check_exit(symbol, timestamp, state)
+
+        # Avoid immediate re-entries after exits.
+        if symbol in self.last_exit_bar_index:
+            bars_since_exit = current_bar - self.last_exit_bar_index[symbol]
+            if bars_since_exit < self.min_reentry_bars:
+                return self._hold_signal(
+                    symbol,
+                    timestamp,
+                    price,
+                    f"Cooldown active ({bars_since_exit}/{self.min_reentry_bars} bars)",
+                )
+
+        # Skip low-quality volatility regimes that tend to overtrade.
+        if state.atr_pct < self.min_atr_pct:
+            return self._hold_signal(
+                symbol,
+                timestamp,
+                price,
+                f"ATR too low ({state.atr_pct*100:.2f}%)",
+            )
+        if state.atr_pct > self.max_atr_pct:
+            return self._hold_signal(
+                symbol,
+                timestamp,
+                price,
+                f"ATR too high ({state.atr_pct*100:.2f}%)",
+            )
 
         # Step 1: Get market regime
         regime, regime_conf, regime_reason = self.regime_engine.detect_regime(timestamp)
@@ -189,6 +223,13 @@ class Orchestrator:
             return self._hold_signal(symbol, timestamp, price, "Market regime unknown")
         if regime == MarketRegime.HIGH_VOLATILITY:
             return self._hold_signal(symbol, timestamp, price, "High volatility - sitting out")
+        if regime_conf < self.min_regime_confidence:
+            return self._hold_signal(
+                symbol,
+                timestamp,
+                price,
+                f"Weak regime confidence ({regime_conf:.2f})",
+            )
 
         # Step 3: Determine potential trade direction based on regime
         if regime in [MarketRegime.TREND_UP, MarketRegime.STRONG_TREND_UP, MarketRegime.REVERSAL_UP]:
@@ -226,7 +267,11 @@ class Orchestrator:
         votes["CrossAsset"] = self.cross_asset.get_vote(symbol, potential_direction)
 
         # Edge 5: Time of Day
-        votes["TimeOfDay"] = self.time_of_day.get_vote(timestamp, trade_type)
+        votes["TimeOfDay"] = self.time_of_day.get_vote(
+            timestamp,
+            trade_type,
+            intended_direction=potential_direction,
+        )
 
         # Edge 6: Regime (implicit vote based on regime strength)
         if regime_conf > 0.7:
@@ -253,22 +298,34 @@ class Orchestrator:
 
         # Step 6: Calculate consensus
         agreeing_edges = 0
-        consensus_score = 0.0
+        support_score = 0.0
+        opposition_score = 0.0
 
-        for edge_name, signal in votes.items():
+        for signal in votes.values():
             vote_value = signal.vote.value
 
             if potential_direction == "long":
                 if vote_value > 0:
                     agreeing_edges += 1
-                    consensus_score += vote_value * signal.confidence
+                    support_score += vote_value * signal.confidence
+                elif vote_value < 0 and vote_value > EdgeVote.VETO_LONG.value:
+                    opposition_score += abs(vote_value) * signal.confidence
             else:  # short
                 if vote_value < 0:
                     agreeing_edges += 1
-                    consensus_score += abs(vote_value) * signal.confidence
+                    support_score += abs(vote_value) * signal.confidence
+                elif vote_value > 0 and vote_value < EdgeVote.VETO_SHORT.value:
+                    opposition_score += vote_value * signal.confidence
 
         # Normalize score
-        consensus_score = consensus_score / len(votes) if votes else 0
+        consensus_score = support_score / len(votes) if votes else 0
+        opposition_score = opposition_score / len(votes) if votes else 0
+        agreement_ratio = (agreeing_edges / len(votes)) if votes else 0.0
+        directional_quality = (
+            consensus_score / max(1e-9, consensus_score + opposition_score)
+            if consensus_score > 0
+            else 0.0
+        )
 
         # Step 7: Check if we have enough agreement
         if agreeing_edges < self.min_consensus_edges:
@@ -279,13 +336,38 @@ class Orchestrator:
             return self._hold_signal(symbol, timestamp, price,
                                     f"Weak consensus score: {consensus_score:.2f}")
 
+        if opposition_score > self.max_opposition_score:
+            return self._hold_signal(
+                symbol,
+                timestamp,
+                price,
+                f"Opposition too strong: {opposition_score:.2f}",
+            )
+
+        if directional_quality < 0.6:
+            return self._hold_signal(
+                symbol,
+                timestamp,
+                price,
+                f"Low directional quality: {directional_quality:.2f}",
+            )
+
         # Step 8: Calculate position size based on consensus strength
-        base_size = 0.01  # 1% base
-        size_multiplier = min(2.0, 1.0 + consensus_score)
+        base_size = 0.008  # 0.8% base
+        quality_boost = (
+            1.0
+            + (consensus_score * 1.25)
+            + (agreement_ratio * 0.5)
+            + max(0.0, regime_conf - 0.5) * 0.75
+        )
+        volatility_scalar = max(0.35, min(1.35, 0.01 / max(state.atr_pct, 0.0005)))
+        size_multiplier = quality_boost * volatility_scalar
         position_size = min(self.max_position_pct, base_size * size_multiplier)
 
         # Step 9: Calculate stops based on ATR
         atr = state.atr
+        if atr <= 0:
+            return self._hold_signal(symbol, timestamp, price, "ATR unavailable")
         if potential_direction == "long":
             stop_loss = price - (atr * self.atr_stop_mult)
             take_profit = price + (atr * self.atr_target_mult)
@@ -304,11 +386,15 @@ class Orchestrator:
             "best_price": price,
             "trailing_active": False,
             "regime_at_entry": regime,
+            "entry_bar_index": current_bar,
         }
 
         # Build reason string
         vote_summary = ", ".join([f"{k}:{v.vote.name}" for k, v in votes.items()])
-        reason = f"{agreeing_edges}/6 edges agree, score={consensus_score:.2f}. {vote_summary}"
+        reason = (
+            f"{agreeing_edges}/6 edges agree, score={consensus_score:.2f}, "
+            f"opp={opposition_score:.2f}, q={directional_quality:.2f}. {vote_summary}"
+        )
 
         return OrchestratorSignal(
             symbol=symbol,
@@ -409,6 +495,7 @@ class Orchestrator:
             reason = f"End of day close | P&L: {pnl_pct:+.2f}%"
 
         if action in ("sell", "cover"):
+            self.last_exit_bar_index[symbol] = len(state.prices)
             del self.positions[symbol]
 
         return OrchestratorSignal(
@@ -438,6 +525,7 @@ class Orchestrator:
     def clear_positions(self):
         """Clear all positions (for warmup)."""
         self.positions.clear()
+        self.last_exit_bar_index.clear()
 
 
 def create_orchestrator() -> Orchestrator:

@@ -341,19 +341,27 @@ class PortfolioManager:
         weights = {}
 
         for symbol, signal in signals.items():
-            # Use signal strength as edge proxy
-            edge = signal.signal * signal.confidence
+            # Convert signal to a conservative Kelly estimate with volatility and
+            # confidence haircuts to avoid overbetting noisy edges.
+            signal_strength = abs(signal.signal)
+            volatility = max(self._vol_estimates.get(symbol, self.config.target_volatility), 0.01)
+            risk_adjusted_edge = (signal_strength * signal.confidence) / volatility
 
-            # Estimate win rate from signal confidence
-            win_rate = 0.5 + signal.confidence * 0.25  # 50-75%
+            # Win probability proxy: bounded and smoothed by edge quality.
+            win_rate = float(np.clip(0.5 + 0.35 * np.tanh(risk_adjusted_edge), 0.5, 0.85))
 
-            # Simple Kelly approximation
-            kelly_f = (win_rate - (1 - win_rate)) / 1.0  # Assuming even odds
+            # Payoff proxy: stronger directional conviction implies better skew.
+            payoff_ratio = float(np.clip(1.0 + signal_strength * 1.5, 1.0, 2.5))
 
-            # Apply fractional Kelly
-            weight = kelly_f * self.config.kelly_fraction
+            # Binary Kelly with asymmetric payoff.
+            lose_rate = 1.0 - win_rate
+            full_kelly = (win_rate * payoff_ratio - lose_rate) / payoff_ratio
+            full_kelly = max(0.0, full_kelly)
 
-            # Clamp to reasonable range
+            confidence_haircut = float(np.clip(signal.confidence ** 2, 0.1, 1.0))
+            vol_haircut = float(np.clip(self.config.target_volatility / volatility, 0.25, 1.5))
+
+            weight = full_kelly * self.config.kelly_fraction * confidence_haircut * vol_haircut
             weight = np.clip(weight, -self.config.max_weight, self.config.max_weight)
             weights[symbol] = abs(weight)
 

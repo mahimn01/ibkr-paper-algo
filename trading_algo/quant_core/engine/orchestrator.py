@@ -32,8 +32,8 @@ from enum import Enum, auto
 import logging
 import json
 import os
+import re
 
-from trading_algo.quant_core.utils.constants import EPSILON, SQRT_252
 from trading_algo.quant_core.engine.trading_context import (
     TradingContext, BacktestContext, LiveContext, MarketData, Position
 )
@@ -264,6 +264,15 @@ class QuantOrchestrator:
         # Calculate additional metrics
         returns = context_results['returns']
         equity_curve = context_results['equity_curve']
+        periods_per_year = self._periods_per_year(self.config.bar_frequency)
+
+        annualized_return = 0.0
+        if len(returns) > 0:
+            total_return = float(context_results['total_return'])
+            total_growth = 1.0 + total_return
+            years = len(returns) / periods_per_year if periods_per_year > 0 else 0.0
+            if years > 0:
+                annualized_return = (total_growth ** (1.0 / years) - 1.0) if total_growth > 0 else -1.0
 
         # Trade statistics
         trades = context_results['trades']
@@ -294,7 +303,7 @@ class QuantOrchestrator:
 
         result = BacktestResult(
             total_return=context_results['total_return'],
-            annualized_return=context_results['total_return'] * 252 / len(returns) if len(returns) > 0 else 0,
+            annualized_return=annualized_return,
             sharpe_ratio=context_results['sharpe_ratio'],
             sortino_ratio=context_results['sortino_ratio'],
             calmar_ratio=context_results['calmar_ratio'],
@@ -303,7 +312,7 @@ class QuantOrchestrator:
             win_rate=win_rate,
             profit_factor=profit_factor,
             avg_trade_pnl=np.mean([t.get('pnl', 0) for t in trades]) if trades else 0.0,
-            volatility=float(np.std(returns) * SQRT_252) if len(returns) > 1 else 0.0,
+            volatility=float(np.std(returns) * np.sqrt(periods_per_year)) if len(returns) > 1 else 0.0,
             var_95=float(np.percentile(returns, 5)) if len(returns) > 20 else 0.0,
             avg_exposure=np.mean([s.get('gross_exposure', 0) for s in self._daily_stats]) if self._daily_stats else 0.0,
             equity_curve=equity_curve,
@@ -662,6 +671,34 @@ class QuantOrchestrator:
             'risk_action': risk_decision.action.name,
             'regime': self.state.current_regime.name,
         })
+
+    def _periods_per_year(self, bar_frequency: str) -> float:
+        """Estimate annualization factor from configured bar frequency."""
+        freq = (bar_frequency or "1D").strip().lower().replace(" ", "")
+        match = re.match(r"(\d+)?([a-z]+)", freq)
+        if not match:
+            return 252.0
+
+        step = int(match.group(1) or "1")
+        unit = match.group(2)
+
+        if unit in {"d", "day", "days"}:
+            return 252.0 / step
+        if unit in {"w", "wk", "week", "weeks"}:
+            return 52.0 / step
+        if unit in {"mo", "mon", "month", "months"}:
+            return 12.0 / step
+        if unit in {"h", "hr", "hour", "hours"}:
+            bars_per_day = max(1.0, 6.5 / step)
+            return bars_per_day * 252.0
+        if unit in {"m", "min", "mins", "minute", "minutes"}:
+            bars_per_day = max(1.0, 390.0 / step)
+            return bars_per_day * 252.0
+        if unit in {"s", "sec", "second", "seconds"}:
+            bars_per_day = max(1.0, 23400.0 / step)
+            return bars_per_day * 252.0
+
+        return 252.0
 
     def _reset_state(self) -> None:
         """Reset engine state."""

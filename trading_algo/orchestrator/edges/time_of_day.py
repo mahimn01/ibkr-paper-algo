@@ -41,6 +41,17 @@ class TimeOfDayEngine:
             "lunch_direction": None,
         }
 
+    def _directional_vote(
+        self,
+        intended_direction: Optional[str],
+    ) -> EdgeVote:
+        """Map intended direction to a directional vote."""
+        if intended_direction == "short":
+            return EdgeVote.SHORT
+        if intended_direction == "long":
+            return EdgeVote.LONG
+        return EdgeVote.NEUTRAL
+
     def get_time_window(self, timestamp: datetime) -> str:
         """Determine which time window we're in."""
         t = timestamp.time()
@@ -62,15 +73,25 @@ class TimeOfDayEngine:
         else:
             return "outside_hours"
 
-    def get_vote(self, timestamp: datetime, trade_type: TradeType) -> EdgeSignal:
+    def get_vote(
+        self,
+        timestamp: datetime,
+        trade_type: TradeType,
+        intended_direction: Optional[str] = None,
+    ) -> EdgeSignal:
         """Get voting signal based on time of day."""
         window = self.get_time_window(timestamp)
 
         # Opening drive - momentum trades good
         if window == "opening_drive":
             if trade_type == TradeType.MOMENTUM_CONTINUATION:
-                return EdgeSignal("TimeOfDay", EdgeVote.LONG, 0.7,
-                                "Opening drive favors momentum", {"window": window})
+                return EdgeSignal(
+                    "TimeOfDay",
+                    self._directional_vote(intended_direction),
+                    0.7,
+                    "Opening drive favors momentum",
+                    {"window": window},
+                )
             else:
                 return EdgeSignal("TimeOfDay", EdgeVote.NEUTRAL, 0.4,
                                 "Opening drive - prefer momentum trades", {"window": window})
@@ -78,16 +99,26 @@ class TimeOfDayEngine:
         # Morning reversal - mean reversion good
         elif window == "morning_reversal":
             if trade_type == TradeType.MEAN_REVERSION:
-                return EdgeSignal("TimeOfDay", EdgeVote.LONG, 0.6,
-                                "10 AM reversal window - good for mean reversion", {"window": window})
+                return EdgeSignal(
+                    "TimeOfDay",
+                    self._directional_vote(intended_direction),
+                    0.6,
+                    "10 AM reversal window - good for mean reversion",
+                    {"window": window},
+                )
             else:
                 return EdgeSignal("TimeOfDay", EdgeVote.NEUTRAL, 0.5,
                                 "10 AM reversal possible", {"window": window})
 
         # Mid-morning trend - best period
         elif window == "mid_morning_trend":
-            return EdgeSignal("TimeOfDay", EdgeVote.LONG, 0.7,
-                            "Best trending period of day", {"window": window})
+            return EdgeSignal(
+                "TimeOfDay",
+                self._directional_vote(intended_direction),
+                0.7,
+                "Best trending period of day",
+                {"window": window},
+            )
 
         # Lunch period - reduced confidence but still tradeable
         elif window == "lunch_chop":
@@ -96,14 +127,24 @@ class TimeOfDayEngine:
 
         # Afternoon trend - second best
         elif window == "afternoon_trend":
-            return EdgeSignal("TimeOfDay", EdgeVote.LONG, 0.6,
-                            "Afternoon trending period", {"window": window})
+            return EdgeSignal(
+                "TimeOfDay",
+                self._directional_vote(intended_direction),
+                0.6,
+                "Afternoon trending period",
+                {"window": window},
+            )
 
         # Power hour - institutions active
         elif window == "power_hour":
             if trade_type == TradeType.MOMENTUM_CONTINUATION:
-                return EdgeSignal("TimeOfDay", EdgeVote.LONG, 0.6,
-                                "Power hour - institutional flow", {"window": window})
+                return EdgeSignal(
+                    "TimeOfDay",
+                    self._directional_vote(intended_direction),
+                    0.6,
+                    "Power hour - institutional flow",
+                    {"window": window},
+                )
             else:
                 return EdgeSignal("TimeOfDay", EdgeVote.NEUTRAL, 0.5,
                                 "Power hour - watch for reversals", {"window": window})

@@ -98,10 +98,12 @@ class AggregatorConfig:
     # Regime adjustments
     regime_scaling: bool = True
     crisis_exposure_mult: float = 0.25  # Reduce exposure in crisis
+    regime_weight_tilt: float = 0.35    # Tilt model weights by detected regime
 
     # Signal thresholds
     min_signal_threshold: float = 0.1
     high_conviction_threshold: float = 0.5
+    disagreement_penalty: float = 0.35  # Penalize conflicting model directions
 
     # OU parameters
     ou_lookback: int = 60
@@ -495,29 +497,72 @@ class SignalAggregator:
         if not signals:
             return 0.0, 0.0
 
+        regime_weights = self._get_regime_adjusted_weights()
         total_weight = 0.0
         weighted_signal = 0.0
         weighted_confidence = 0.0
+        total_abs_signal = 0.0
+        directional_signal = 0.0
 
         for signal_type, signal in signals.items():
-            weight = self._weights.get(signal_type, 0.0)
+            weight = regime_weights.get(signal_type, 0.0)
             adjusted_weight = weight * signal.confidence
 
             weighted_signal += signal.value * adjusted_weight
-            weighted_confidence += signal.confidence * weight
+            weighted_confidence += signal.confidence * adjusted_weight
             total_weight += adjusted_weight
+            total_abs_signal += abs(signal.value) * adjusted_weight
+            directional_signal += signal.value * adjusted_weight
 
         if total_weight < EPSILON:
             return 0.0, 0.0
 
         combined = weighted_signal / total_weight
-        confidence = weighted_confidence / len(signals)
+        confidence = weighted_confidence / total_weight
+
+        # Penalize conflicted model directions to reduce churn in noisy regimes.
+        if total_abs_signal > EPSILON:
+            disagreement = 1.0 - abs(directional_signal) / total_abs_signal
+            penalty = np.clip(self.config.disagreement_penalty, 0.0, 1.0) * disagreement
+            combined *= (1.0 - penalty)
+            confidence *= (1.0 - 0.5 * disagreement)
+
+        # Debounce weak blended signals to avoid overtrading around zero.
+        if abs(combined) < self.config.min_signal_threshold:
+            combined = 0.0
 
         # Clip to valid range
         combined = np.clip(combined, -1.0, 1.0)
         confidence = np.clip(confidence, 0.0, 1.0)
 
         return float(combined), float(confidence)
+
+    def _get_regime_adjusted_weights(self) -> Dict[SignalType, float]:
+        """Adjust base model weights based on detected market regime."""
+        weights = dict(self._weights)
+        tilt = float(np.clip(self.config.regime_weight_tilt, 0.0, 0.75))
+
+        if tilt < EPSILON:
+            return weights
+
+        if self._current_regime in (MarketRegime.BULL, MarketRegime.LOW_VOL):
+            weights[SignalType.MOMENTUM] *= 1.0 + tilt
+            weights[SignalType.VOL_MOMENTUM] *= 1.0 + (tilt * 0.75)
+            weights[SignalType.MEAN_REVERSION] *= 1.0 - (tilt * 0.75)
+        elif self._current_regime == MarketRegime.BEAR:
+            weights[SignalType.MOMENTUM] *= 1.0 - (tilt * 0.75)
+            weights[SignalType.VOL_MOMENTUM] *= 1.0 + (tilt * 0.5)
+            weights[SignalType.MEAN_REVERSION] *= 1.0 + (tilt * 0.25)
+        elif self._current_regime == MarketRegime.HIGH_VOL:
+            weights[SignalType.MOMENTUM] *= 1.0 - tilt
+            weights[SignalType.VOL_MOMENTUM] *= 1.0 - (tilt * 0.5)
+            weights[SignalType.MEAN_REVERSION] *= 1.0 + tilt
+
+        total = sum(max(0.0, w) for w in weights.values())
+        if total < EPSILON:
+            return dict(self._weights)
+
+        return {k: max(0.0, w) / total for k, w in weights.items()}
 
     def _apply_regime_adjustment(self, signal: float) -> float:
         """
@@ -530,34 +575,40 @@ class SignalAggregator:
 
         if regime == MarketRegime.HIGH_VOL:
             # Significantly reduce exposure
-            return signal * self.config.crisis_exposure_mult
-
-        elif regime == MarketRegime.HIGH_VOL:
-            # Moderate reduction
-            return signal * 0.5
+            adjusted = signal * self.config.crisis_exposure_mult
 
         elif regime == MarketRegime.BULL:
             # Favor momentum, slight boost
-            return signal * 1.1
+            adjusted = signal * 1.1
+
+        elif regime == MarketRegime.BEAR:
+            # Preserve directional conviction but reduce leverage.
+            adjusted = signal * 0.75
 
         elif regime == MarketRegime.NEUTRAL:
             # Normal operation
-            return signal
+            adjusted = signal
+
+        elif regime == MarketRegime.LOW_VOL:
+            adjusted = signal * 1.05
 
         else:
             # Unknown regime, be cautious
-            return signal * 0.75
+            adjusted = signal * 0.75
+
+        return float(np.clip(adjusted, -1.0, 1.0))
 
     def get_signal_breakdown(
         self,
         aggregated: AggregatedSignal,
     ) -> Dict[str, Any]:
         """Get detailed breakdown of signal components."""
+        regime_weights = self._get_regime_adjusted_weights()
         breakdown = {
             'symbol': aggregated.symbol,
             'final_signal': aggregated.signal,
             'confidence': aggregated.confidence,
-            'regime': aggregated.regime.name,
+            'regime': aggregated.market_regime.name,
             'direction': aggregated.direction,
             'components': {},
         }
@@ -567,7 +618,7 @@ class SignalAggregator:
                 'value': sig.value,
                 'confidence': sig.confidence,
                 'raw_value': sig.raw_value,
-                'weight': self._weights.get(sig_type, 0.0),
+                'weight': regime_weights.get(sig_type, 0.0),
                 'metadata': sig.metadata,
             }
 
