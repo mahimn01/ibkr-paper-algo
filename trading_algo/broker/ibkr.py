@@ -1204,8 +1204,14 @@ class IBKRBroker:
             ts_epoch = time.time()
             try:
                 if hasattr(ts, "timestamp"):
+                    # datetime.datetime object
                     ts_epoch = float(ts.timestamp())
+                elif isinstance(ts, dt.date):
+                    # datetime.date object - convert to datetime with midnight time
+                    ts_dt = dt.datetime.combine(ts, dt.time.min)
+                    ts_epoch = float(ts_dt.timestamp())
                 else:
+                    # Might be epoch timestamp directly
                     ts_epoch = float(ts)
             except Exception:
                 pass
