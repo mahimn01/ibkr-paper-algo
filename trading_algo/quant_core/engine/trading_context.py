@@ -528,15 +528,13 @@ class BacktestContext(TradingContext):
             match_qty = min(abs(remaining), abs(lot["qty"]))
 
             gross_pnl = (fill_price - lot["entry_price"]) * match_qty * lot_sign
-            entry_cost = (
-                lot["commission_per_share"] * match_qty +
-                lot["slippage_per_share"] * match_qty
-            )
-            exit_cost = (
-                commission_per_share * match_qty +
-                slippage_per_share * match_qty
-            )
-            net_pnl = gross_pnl - entry_cost - exit_cost
+            # Slippage is already embedded in entry/exit fill prices.
+            # Subtract only commissions to reconcile trade PnL with cash/equity.
+            entry_commission = lot["commission_per_share"] * match_qty
+            exit_commission = commission_per_share * match_qty
+            entry_slippage = lot["slippage_per_share"] * match_qty
+            exit_slippage = slippage_per_share * match_qty
+            net_pnl = gross_pnl - entry_commission - exit_commission
 
             self.closed_trades.append({
                 "symbol": symbol,
@@ -547,11 +545,8 @@ class BacktestContext(TradingContext):
                 "entry_price": float(lot["entry_price"]),
                 "exit_price": float(fill_price),
                 "gross_pnl": float(gross_pnl),
-                "commission": float(entry_cost + exit_cost),
-                "slippage": float(
-                    lot["slippage_per_share"] * match_qty +
-                    slippage_per_share * match_qty
-                ),
+                "commission": float(entry_commission + exit_commission),
+                "slippage": float(entry_slippage + exit_slippage),
                 "pnl": float(net_pnl),
                 "bars_held": max(0, self.current_bar - lot["entry_bar"]),
             })
@@ -609,6 +604,49 @@ class BacktestContext(TradingContext):
             return 52.0 / max(step_days / 7.0, 1e-9)
         return max(1.0, 365.0 / step_days)
 
+    def _mark_to_market_open_trades(self) -> List[Dict[str, Any]]:
+        """
+        Create synthetic trade records for still-open lots at final mark.
+
+        These records keep trade-level metrics consistent with final equity
+        without mutating cash/positions at the end of backtests.
+        """
+        snapshots: List[Dict[str, Any]] = []
+        now = self.get_current_time()
+
+        for symbol, lots in self._open_lots.items():
+            pos = self.positions.get(symbol)
+            if pos is None:
+                continue
+
+            exit_price = pos.current_price if pos.current_price > 0 else pos.avg_cost
+            for lot in lots:
+                qty = abs(lot["qty"])
+                lot_sign = 1.0 if lot["qty"] > 0 else -1.0
+                gross_pnl = (exit_price - lot["entry_price"]) * qty * lot_sign
+                entry_commission = lot["commission_per_share"] * qty
+                entry_slippage = lot["slippage_per_share"] * qty
+                # Slippage is already reflected in lot entry price.
+                net_pnl = gross_pnl - entry_commission
+
+                snapshots.append({
+                    "symbol": symbol,
+                    "direction": "LONG" if lot_sign > 0 else "SHORT",
+                    "quantity": float(qty),
+                    "entry_time": lot["entry_time"],
+                    "exit_time": now,
+                    "entry_price": float(lot["entry_price"]),
+                    "exit_price": float(exit_price),
+                    "gross_pnl": float(gross_pnl),
+                    "commission": float(entry_commission),
+                    "slippage": float(entry_slippage),
+                    "pnl": float(net_pnl),
+                    "bars_held": max(0, self.current_bar - lot["entry_bar"]),
+                    "is_open_mark_to_market": True,
+                })
+
+        return snapshots
+
     def cancel_order(self, order_id: str) -> bool:
         if order_id in self.orders:
             self.orders[order_id].status = OrderStatus.CANCELLED
@@ -649,6 +687,8 @@ class BacktestContext(TradingContext):
         """Get backtest results."""
         equity = np.array(self.equity_curve)
         returns = np.diff(equity) / equity[:-1]
+        open_trade_snapshots = self._mark_to_market_open_trades()
+        effective_trades = self.closed_trades + open_trade_snapshots
         periods_per_year = self._infer_periods_per_year()
         total_return = (equity[-1] / self.initial_capital - 1) if self.initial_capital > 0 else 0.0
 
@@ -696,11 +736,14 @@ class BacktestContext(TradingContext):
             'sortino_ratio': float(sortino),
             'calmar_ratio': float(calmar),
             'max_drawdown': float(max_dd),
-            'n_trades': len(self.closed_trades),
+            'n_trades': len(effective_trades),
             'n_fills': len(self.trade_log),
+            'n_closed_trades': len(self.closed_trades),
+            'n_open_trade_snapshots': len(open_trade_snapshots),
             'equity_curve': equity,
             'returns': returns,
-            'trades': self.closed_trades,
+            'trades': effective_trades,
+            'closed_trades': self.closed_trades,
             'fills': self.trade_log,
         }
 

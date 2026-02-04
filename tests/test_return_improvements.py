@@ -146,6 +146,41 @@ def test_backtest_context_handles_flip_with_fifo_pnl() -> None:
     assert results["trades"][1]["direction"] == "SHORT"
 
 
+def test_trade_pnl_reconciles_with_equity_when_slippage_is_nonzero() -> None:
+    timestamps = np.array([
+        datetime(2026, 1, 2, 9, 30),
+        datetime(2026, 1, 2, 9, 35),
+        datetime(2026, 1, 2, 9, 40),
+    ], dtype=object)
+    historical_data = {
+        "AAA": np.array([
+            [100.0, 100.0, 100.0, 100.0, 1000.0],
+            [100.0, 100.0, 100.0, 100.0, 1000.0],
+            [100.0, 100.0, 100.0, 100.0, 1000.0],
+        ])
+    }
+    ctx = BacktestContext(
+        historical_data=historical_data,
+        timestamps=timestamps,
+        initial_capital=100000.0,
+        commission_rate=0.0,
+        slippage_rate=0.01,
+    )
+
+    ctx.submit_order("AAA", OrderSide.BUY, 10)
+    assert ctx.advance()
+    ctx.submit_order("AAA", OrderSide.SELL, 10)
+    assert ctx.advance()
+
+    results = ctx.get_results()
+    trade_pnl = sum(t["pnl"] for t in results["trades"])
+    total_pnl = float(results["final_equity"] - results["initial_capital"])
+
+    assert results["n_trades"] == 1
+    assert trade_pnl == pytest.approx(total_pnl)
+    assert trade_pnl == pytest.approx(-20.0)
+
+
 def test_save_results_exports_reconciled_trade_and_fill_logs(tmp_path: Path) -> None:
     timestamps = np.array([
         datetime(2026, 1, 2, 9, 30),

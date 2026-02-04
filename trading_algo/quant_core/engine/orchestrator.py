@@ -445,6 +445,9 @@ class QuantOrchestrator:
         if self.config.save_signals:
             self._log_signals(signals)
 
+        current_prices = {s: market_data[s].close for s in market_data}
+        self._mark_positions_to_market(current_prices)
+
         # 4. Get account info and check risk
         account = self.context.get_account_info()
         positions = {s: p.quantity for s, p in account.positions.items()}
@@ -462,7 +465,6 @@ class QuantOrchestrator:
             return
 
         # 6. Construct target portfolio
-        current_prices = {s: market_data[s].close for s in market_data}
         returns_matrix = self._get_returns_matrix()
 
         target = self.portfolio_manager.construct_portfolio(
@@ -478,7 +480,8 @@ class QuantOrchestrator:
         self._execute_portfolio(target, current_prices, risk_decision)
 
         # 8. Log daily stats
-        self._log_daily_stats(account, risk_decision, target)
+        self._mark_positions_to_market(current_prices)
+        self._log_daily_stats(self.context.get_account_info(), risk_decision)
 
         # Update state
         self.state.last_rebalance = self.state.current_time
@@ -524,6 +527,18 @@ class QuantOrchestrator:
             if md:
                 data[symbol] = md
         return data
+
+    def _mark_positions_to_market(self, current_prices: Dict[str, float]) -> None:
+        """Mark current context positions to latest prices for consistent stats."""
+        if self.context is None:
+            return
+
+        for symbol, price in current_prices.items():
+            pos = self.context.get_position(symbol)
+            if pos is None:
+                continue
+            pos.current_price = price
+            pos.unrealized_pnl = (price - pos.avg_cost) * pos.quantity
 
     def _get_price_array(self, symbol: str) -> Optional[NDArray[np.float64]]:
         """Get price array for a symbol."""
@@ -664,17 +679,24 @@ class QuantOrchestrator:
         self,
         account,
         risk_decision: RiskDecision,
-        target: TargetPortfolio,
     ) -> None:
         """Log daily statistics."""
+        equity = float(account.equity)
+        position_values = [float(p.market_value) for p in account.positions.values()]
+        if abs(equity) > 1e-9:
+            gross_exposure = sum(abs(v) for v in position_values) / abs(equity)
+            net_exposure = sum(position_values) / equity
+        else:
+            gross_exposure = 0.0
+            net_exposure = 0.0
+
         self._daily_stats.append({
             'timestamp': str(self.state.current_time),
-            'equity': account.equity,
-            'cash': account.cash,
-            'gross_exposure': target.gross_exposure,
-            'net_exposure': target.net_exposure,
-            'n_positions': len([p for p in target.positions.values()
-                               if abs(p.target_shares) > 0]),
+            'equity': equity,
+            'cash': float(account.cash),
+            'gross_exposure': float(gross_exposure),
+            'net_exposure': float(net_exposure),
+            'n_positions': len(account.positions),
             'risk_action': risk_decision.action.name,
             'regime': self.state.current_regime.name,
         })
