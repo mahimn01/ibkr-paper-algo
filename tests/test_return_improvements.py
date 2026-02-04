@@ -1,5 +1,8 @@
+import json
 from datetime import datetime
+from pathlib import Path
 
+import numpy as np
 import pytest
 
 from trading_algo.orchestrator.edges.time_of_day import TimeOfDayEngine
@@ -11,6 +14,7 @@ from trading_algo.quant_core.engine.signal_aggregator import (
     SignalAggregator,
     SignalType,
 )
+from trading_algo.quant_core.engine.trading_context import BacktestContext, OrderSide
 from trading_algo.quant_core.models.hmm_regime import MarketRegime
 
 
@@ -73,3 +77,114 @@ def test_signal_disagreement_penalty_reduces_blended_signal() -> None:
 def test_periods_per_year_parsing(bar_frequency: str, expected: float) -> None:
     orchestrator = QuantOrchestrator(EngineConfig(universe=[]))
     assert orchestrator._periods_per_year(bar_frequency) == pytest.approx(expected)
+
+
+def test_backtest_context_reports_closed_trades_not_fill_events() -> None:
+    timestamps = np.array([
+        datetime(2026, 1, 2, 9, 30),
+        datetime(2026, 1, 2, 9, 35),
+        datetime(2026, 1, 2, 9, 40),
+    ], dtype=object)
+    historical_data = {
+        "AAA": np.array([
+            [100.0, 100.0, 100.0, 100.0, 1000.0],
+            [105.0, 105.0, 105.0, 105.0, 1000.0],
+            [104.0, 104.0, 104.0, 104.0, 1000.0],
+        ])
+    }
+    ctx = BacktestContext(
+        historical_data=historical_data,
+        timestamps=timestamps,
+        commission_rate=0.0,
+        slippage_rate=0.0,
+    )
+
+    ctx.submit_order("AAA", OrderSide.BUY, 10)
+    assert ctx.advance()
+    ctx.submit_order("AAA", OrderSide.SELL, 10)
+
+    results = ctx.get_results()
+    assert results["n_fills"] == 2
+    assert results["n_trades"] == 1
+    assert len(results["trades"]) == 1
+    assert results["trades"][0]["pnl"] == pytest.approx(50.0)
+
+
+def test_backtest_context_handles_flip_with_fifo_pnl() -> None:
+    timestamps = np.array([
+        datetime(2026, 1, 2, 9, 30),
+        datetime(2026, 1, 2, 9, 35),
+        datetime(2026, 1, 2, 9, 40),
+        datetime(2026, 1, 2, 9, 45),
+    ], dtype=object)
+    historical_data = {
+        "AAA": np.array([
+            [100.0, 100.0, 100.0, 100.0, 1000.0],
+            [101.0, 101.0, 101.0, 101.0, 1000.0],
+            [99.0, 99.0, 99.0, 99.0, 1000.0],
+            [99.0, 99.0, 99.0, 99.0, 1000.0],
+        ])
+    }
+    ctx = BacktestContext(
+        historical_data=historical_data,
+        timestamps=timestamps,
+        commission_rate=0.0,
+        slippage_rate=0.0,
+    )
+
+    ctx.submit_order("AAA", OrderSide.BUY, 10)   # +10 @100
+    assert ctx.advance()
+    ctx.submit_order("AAA", OrderSide.SELL, 15)  # close +10 @101, open -5 @101
+    assert ctx.advance()
+    ctx.submit_order("AAA", OrderSide.BUY, 5)    # close -5 @99
+
+    results = ctx.get_results()
+    assert results["n_fills"] == 3
+    assert results["n_trades"] == 2
+    assert sum(t["pnl"] for t in results["trades"]) == pytest.approx(20.0)
+    assert results["trades"][0]["direction"] == "LONG"
+    assert results["trades"][1]["direction"] == "SHORT"
+
+
+def test_save_results_exports_reconciled_trade_and_fill_logs(tmp_path: Path) -> None:
+    timestamps = np.array([
+        datetime(2026, 1, 2, 9, 30),
+        datetime(2026, 1, 2, 9, 35),
+        datetime(2026, 1, 2, 9, 40),
+    ], dtype=object)
+    historical_data = {
+        "AAA": np.array([
+            [100.0, 100.0, 100.0, 100.0, 1000.0],
+            [105.0, 105.0, 105.0, 105.0, 1000.0],
+            [104.0, 104.0, 104.0, 104.0, 1000.0],
+        ])
+    }
+    ctx = BacktestContext(
+        historical_data=historical_data,
+        timestamps=timestamps,
+        commission_rate=0.0,
+        slippage_rate=0.0,
+    )
+    ctx.submit_order("AAA", OrderSide.BUY, 10)
+    assert ctx.advance()
+    ctx.submit_order("AAA", OrderSide.SELL, 10)
+
+    orchestrator = QuantOrchestrator(EngineConfig(universe=[]))
+    orchestrator.context = ctx
+    orchestrator._trade_log = [{"symbol": "AAA", "shares": 10, "price": 100.0}]
+
+    out = tmp_path / "exports"
+    orchestrator.save_results(str(out))
+
+    assert (out / "execution_events.json").exists()
+    assert (out / "trades.json").exists()
+    assert (out / "fills.json").exists()
+
+    trades = json.loads((out / "trades.json").read_text())
+    fills = json.loads((out / "fills.json").read_text())
+    summary = json.loads((out / "summary.json").read_text())
+
+    assert len(trades) == 1
+    assert len(fills) == 2
+    assert summary["n_trades"] == 1
+    assert summary["n_fills"] == 2

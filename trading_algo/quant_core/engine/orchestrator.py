@@ -273,6 +273,13 @@ class QuantOrchestrator:
             years = len(returns) / periods_per_year if periods_per_year > 0 else 0.0
             if years > 0:
                 annualized_return = (total_growth ** (1.0 / years) - 1.0) if total_growth > 0 else -1.0
+        annualized_return = float(context_results.get('annualized_return', annualized_return))
+        realized_volatility = float(
+            context_results.get(
+                'volatility',
+                (np.std(returns) * np.sqrt(periods_per_year)) if len(returns) > 1 else 0.0,
+            )
+        )
 
         # Trade statistics
         trades = context_results['trades']
@@ -312,7 +319,7 @@ class QuantOrchestrator:
             win_rate=win_rate,
             profit_factor=profit_factor,
             avg_trade_pnl=np.mean([t.get('pnl', 0) for t in trades]) if trades else 0.0,
-            volatility=float(np.std(returns) * np.sqrt(periods_per_year)) if len(returns) > 1 else 0.0,
+            volatility=realized_volatility,
             var_95=float(np.percentile(returns, 5)) if len(returns) > 20 else 0.0,
             avg_exposure=np.mean([s.get('gross_exposure', 0) for s in self._daily_stats]) if self._daily_stats else 0.0,
             equity_curve=equity_curve,
@@ -737,8 +744,40 @@ class QuantOrchestrator:
             with open(os.path.join(path, 'signals.json'), 'w') as f:
                 json.dump(self._signal_log, f, indent=2)
 
-        # Save trades
+        # Save execution-level events
         if self._trade_log:
+            with open(os.path.join(path, 'execution_events.json'), 'w') as f:
+                json.dump(self._trade_log, f, indent=2)
+
+        # Save realized trade/fill logs from backtest context (if available).
+        if isinstance(self.context, BacktestContext):
+            context_results = self.context.get_results()
+
+            with open(os.path.join(path, 'trades.json'), 'w') as f:
+                json.dump(context_results.get('trades', []), f, indent=2, default=str)
+
+            with open(os.path.join(path, 'fills.json'), 'w') as f:
+                json.dump(context_results.get('fills', []), f, indent=2, default=str)
+
+            summary = {
+                "initial_capital": context_results.get("initial_capital"),
+                "final_equity": context_results.get("final_equity"),
+                "total_return": context_results.get("total_return"),
+                "annualized_return": context_results.get("annualized_return"),
+                "volatility": context_results.get("volatility"),
+                "sharpe_ratio": context_results.get("sharpe_ratio"),
+                "sortino_ratio": context_results.get("sortino_ratio"),
+                "calmar_ratio": context_results.get("calmar_ratio"),
+                "max_drawdown": context_results.get("max_drawdown"),
+                "n_trades": context_results.get("n_trades"),
+                "n_fills": context_results.get("n_fills"),
+                "periods_per_year": context_results.get("periods_per_year"),
+            }
+            with open(os.path.join(path, 'summary.json'), 'w') as f:
+                json.dump(summary, f, indent=2, default=str)
+        elif self._trade_log:
+            # Legacy fallback for live/paper mode where realized-trade data
+            # is not reconstructed from a backtest context.
             with open(os.path.join(path, 'trades.json'), 'w') as f:
                 json.dump(self._trade_log, f, indent=2)
 

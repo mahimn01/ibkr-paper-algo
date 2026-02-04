@@ -281,7 +281,9 @@ class BacktestContext(TradingContext):
 
         # Performance tracking
         self.equity_curve: List[float] = [initial_capital]
-        self.trade_log: List[Dict] = []
+        self.trade_log: List[Dict] = []       # Fill events
+        self.closed_trades: List[Dict] = []   # Round-trip trades with realized PnL
+        self._open_lots: Dict[str, List[Dict[str, Any]]] = {}
 
         # Symbols in universe
         self.symbols = list(historical_data.keys())
@@ -411,6 +413,7 @@ class BacktestContext(TradingContext):
         fill_qty = order.quantity * self.fill_ratio
         fill_value = fill_qty * base_price
         commission = fill_value * self.commission_rate
+        slippage = abs(base_price - market_data.close) * fill_qty
 
         # Update order
         order.filled_quantity = fill_qty
@@ -419,7 +422,7 @@ class BacktestContext(TradingContext):
         order.status = OrderStatus.FILLED
 
         # Update position
-        self._update_position(order, base_price, commission)
+        self._update_position(order, base_price, commission, slippage)
 
         # Log trade
         self.trade_log.append({
@@ -429,6 +432,10 @@ class BacktestContext(TradingContext):
             'quantity': fill_qty,
             'price': base_price,
             'commission': commission,
+            'slippage': slippage,
+            'fill_value': fill_value,
+            'bar_index': self.current_bar,
+            'order_id': order.order_id,
         })
 
     def _update_position(
@@ -436,6 +443,7 @@ class BacktestContext(TradingContext):
         order: Order,
         fill_price: float,
         commission: float,
+        slippage: float,
     ) -> None:
         """Update position after fill."""
         symbol = order.symbol
@@ -443,6 +451,15 @@ class BacktestContext(TradingContext):
 
         if order.side == OrderSide.SELL:
             fill_qty = -fill_qty
+
+        self._match_lots(
+            symbol=symbol,
+            signed_qty=fill_qty,
+            fill_price=fill_price,
+            commission=commission,
+            slippage=slippage,
+            timestamp=self.get_current_time(),
+        )
 
         # Get or create position
         if symbol in self.positions:
@@ -452,7 +469,6 @@ class BacktestContext(TradingContext):
 
             if abs(new_qty) < EPSILON:
                 # Position closed
-                realized = (fill_price - pos.avg_cost) * old_qty
                 del self.positions[symbol]
             elif (old_qty > 0 and fill_qty < 0) or (old_qty < 0 and fill_qty > 0):
                 # Reducing position
@@ -482,6 +498,116 @@ class BacktestContext(TradingContext):
             self.cash -= trade_value + commission
         else:
             self.cash += trade_value - commission
+
+    def _match_lots(
+        self,
+        symbol: str,
+        signed_qty: float,
+        fill_price: float,
+        commission: float,
+        slippage: float,
+        timestamp: datetime,
+    ) -> None:
+        """Match fills against open lots and emit realized round-trip trades."""
+        if abs(signed_qty) < EPSILON:
+            return
+
+        total_qty = abs(signed_qty)
+        commission_per_share = commission / total_qty if total_qty > EPSILON else 0.0
+        slippage_per_share = slippage / total_qty if total_qty > EPSILON else 0.0
+
+        lots = self._open_lots.setdefault(symbol, [])
+        remaining = signed_qty
+
+        while (
+            abs(remaining) > EPSILON and lots and
+            np.sign(lots[0]["qty"]) != np.sign(remaining)
+        ):
+            lot = lots[0]
+            lot_sign = 1.0 if lot["qty"] > 0 else -1.0
+            match_qty = min(abs(remaining), abs(lot["qty"]))
+
+            gross_pnl = (fill_price - lot["entry_price"]) * match_qty * lot_sign
+            entry_cost = (
+                lot["commission_per_share"] * match_qty +
+                lot["slippage_per_share"] * match_qty
+            )
+            exit_cost = (
+                commission_per_share * match_qty +
+                slippage_per_share * match_qty
+            )
+            net_pnl = gross_pnl - entry_cost - exit_cost
+
+            self.closed_trades.append({
+                "symbol": symbol,
+                "direction": "LONG" if lot_sign > 0 else "SHORT",
+                "quantity": float(match_qty),
+                "entry_time": lot["entry_time"],
+                "exit_time": timestamp,
+                "entry_price": float(lot["entry_price"]),
+                "exit_price": float(fill_price),
+                "gross_pnl": float(gross_pnl),
+                "commission": float(entry_cost + exit_cost),
+                "slippage": float(
+                    lot["slippage_per_share"] * match_qty +
+                    slippage_per_share * match_qty
+                ),
+                "pnl": float(net_pnl),
+                "bars_held": max(0, self.current_bar - lot["entry_bar"]),
+            })
+
+            lot["qty"] -= lot_sign * match_qty
+            remaining -= np.sign(remaining) * match_qty
+
+            if abs(lot["qty"]) < EPSILON:
+                lots.pop(0)
+
+        if abs(remaining) > EPSILON:
+            lots.append({
+                "qty": float(remaining),
+                "entry_price": float(fill_price),
+                "entry_time": timestamp,
+                "entry_bar": int(self.current_bar),
+                "commission_per_share": float(commission_per_share),
+                "slippage_per_share": float(slippage_per_share),
+            })
+
+        if not lots:
+            self._open_lots.pop(symbol, None)
+
+    def _infer_periods_per_year(self) -> float:
+        """Infer annualization factor from timestamp spacing."""
+        if len(self.timestamps) < 3:
+            return 252.0
+
+        sample = self.timestamps[: min(len(self.timestamps), 400)]
+        dt_list: List[datetime] = []
+        for ts in sample:
+            if isinstance(ts, (int, float, np.integer, np.floating)):
+                dt_list.append(datetime.fromtimestamp(float(ts)))
+            else:
+                dt_list.append(ts)
+
+        deltas = [
+            (dt_list[i] - dt_list[i - 1]).total_seconds()
+            for i in range(1, len(dt_list))
+            if (dt_list[i] - dt_list[i - 1]).total_seconds() > 0
+        ]
+        if not deltas:
+            return 252.0
+
+        intraday = [d for d in deltas if d <= 2 * 3600]
+        if intraday:
+            step = float(np.median(intraday))
+            periods_per_day = max(1.0, min(390.0, 23400.0 / max(step, 1.0)))
+            return periods_per_day * 252.0
+
+        step_days = float(np.median([d / 86400.0 for d in deltas]))
+        if step_days <= 1.5:
+            return 252.0 / max(step_days, 1e-9)
+        if step_days <= 8.0:
+            return 52.0 / max(step_days / 7.0, 1e-9)
+        return max(1.0, 365.0 / step_days)
 
     def cancel_order(self, order_id: str) -> bool:
         if order_id in self.orders:
@@ -523,23 +649,59 @@ class BacktestContext(TradingContext):
         """Get backtest results."""
         equity = np.array(self.equity_curve)
         returns = np.diff(equity) / equity[:-1]
+        periods_per_year = self._infer_periods_per_year()
+        total_return = (equity[-1] / self.initial_capital - 1) if self.initial_capital > 0 else 0.0
 
-        from trading_algo.quant_core.utils.statistics import (
-            sharpe_ratio, max_drawdown, sortino_ratio, calmar_ratio
+        if len(returns) > 1:
+            mean_ret = float(np.mean(returns))
+            std_ret = float(np.std(returns, ddof=1))
+            downside = returns[returns < 0]
+            downside_std = float(np.std(downside, ddof=1)) if len(downside) > 1 else 0.0
+        else:
+            mean_ret = 0.0
+            std_ret = 0.0
+            downside_std = 0.0
+
+        sharpe = (mean_ret / std_ret * np.sqrt(periods_per_year)) if std_ret > EPSILON else 0.0
+        sortino = (
+            mean_ret / downside_std * np.sqrt(periods_per_year)
+            if downside_std > EPSILON else 0.0
         )
+
+        # Max drawdown from cumulative equity
+        if len(returns) > 0:
+            cumulative = np.cumprod(1 + returns)
+            running_max = np.maximum.accumulate(cumulative)
+            dd_series = 1 - cumulative / np.maximum(running_max, EPSILON)
+            max_dd = float(np.max(dd_series))
+        else:
+            max_dd = 0.0
+
+        years = (len(returns) / periods_per_year) if periods_per_year > 0 else 0.0
+        if years > 0 and (1 + total_return) > 0:
+            annualized_return = float((1 + total_return) ** (1 / years) - 1)
+        else:
+            annualized_return = -1.0 if total_return <= -1 else 0.0
+
+        calmar = annualized_return / max_dd if max_dd > EPSILON else 0.0
 
         return {
             'initial_capital': self.initial_capital,
             'final_equity': equity[-1],
-            'total_return': (equity[-1] / self.initial_capital - 1),
-            'sharpe_ratio': sharpe_ratio(returns),
-            'sortino_ratio': sortino_ratio(returns),
-            'calmar_ratio': calmar_ratio(returns),
-            'max_drawdown': max_drawdown(returns),
-            'n_trades': len(self.trade_log),
+            'total_return': total_return,
+            'annualized_return': annualized_return,
+            'volatility': std_ret * np.sqrt(periods_per_year) if std_ret > 0 else 0.0,
+            'periods_per_year': periods_per_year,
+            'sharpe_ratio': float(sharpe),
+            'sortino_ratio': float(sortino),
+            'calmar_ratio': float(calmar),
+            'max_drawdown': float(max_dd),
+            'n_trades': len(self.closed_trades),
+            'n_fills': len(self.trade_log),
             'equity_curve': equity,
             'returns': returns,
-            'trades': self.trade_log,
+            'trades': self.closed_trades,
+            'fills': self.trade_log,
         }
 
 
