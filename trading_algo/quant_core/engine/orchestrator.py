@@ -32,8 +32,8 @@ from enum import Enum, auto
 import logging
 import json
 import os
+import re
 
-from trading_algo.quant_core.utils.constants import EPSILON, SQRT_252
 from trading_algo.quant_core.engine.trading_context import (
     TradingContext, BacktestContext, LiveContext, MarketData, Position
 )
@@ -264,6 +264,22 @@ class QuantOrchestrator:
         # Calculate additional metrics
         returns = context_results['returns']
         equity_curve = context_results['equity_curve']
+        periods_per_year = self._periods_per_year(self.config.bar_frequency)
+
+        annualized_return = 0.0
+        if len(returns) > 0:
+            total_return = float(context_results['total_return'])
+            total_growth = 1.0 + total_return
+            years = len(returns) / periods_per_year if periods_per_year > 0 else 0.0
+            if years > 0:
+                annualized_return = (total_growth ** (1.0 / years) - 1.0) if total_growth > 0 else -1.0
+        annualized_return = float(context_results.get('annualized_return', annualized_return))
+        realized_volatility = float(
+            context_results.get(
+                'volatility',
+                (np.std(returns) * np.sqrt(periods_per_year)) if len(returns) > 1 else 0.0,
+            )
+        )
 
         # Trade statistics
         trades = context_results['trades']
@@ -294,7 +310,7 @@ class QuantOrchestrator:
 
         result = BacktestResult(
             total_return=context_results['total_return'],
-            annualized_return=context_results['total_return'] * 252 / len(returns) if len(returns) > 0 else 0,
+            annualized_return=annualized_return,
             sharpe_ratio=context_results['sharpe_ratio'],
             sortino_ratio=context_results['sortino_ratio'],
             calmar_ratio=context_results['calmar_ratio'],
@@ -303,7 +319,7 @@ class QuantOrchestrator:
             win_rate=win_rate,
             profit_factor=profit_factor,
             avg_trade_pnl=np.mean([t.get('pnl', 0) for t in trades]) if trades else 0.0,
-            volatility=float(np.std(returns) * SQRT_252) if len(returns) > 1 else 0.0,
+            volatility=realized_volatility,
             var_95=float(np.percentile(returns, 5)) if len(returns) > 20 else 0.0,
             avg_exposure=np.mean([s.get('gross_exposure', 0) for s in self._daily_stats]) if self._daily_stats else 0.0,
             equity_curve=equity_curve,
@@ -429,6 +445,9 @@ class QuantOrchestrator:
         if self.config.save_signals:
             self._log_signals(signals)
 
+        current_prices = {s: market_data[s].close for s in market_data}
+        self._mark_positions_to_market(current_prices)
+
         # 4. Get account info and check risk
         account = self.context.get_account_info()
         positions = {s: p.quantity for s, p in account.positions.items()}
@@ -446,7 +465,6 @@ class QuantOrchestrator:
             return
 
         # 6. Construct target portfolio
-        current_prices = {s: market_data[s].close for s in market_data}
         returns_matrix = self._get_returns_matrix()
 
         target = self.portfolio_manager.construct_portfolio(
@@ -462,7 +480,8 @@ class QuantOrchestrator:
         self._execute_portfolio(target, current_prices, risk_decision)
 
         # 8. Log daily stats
-        self._log_daily_stats(account, risk_decision, target)
+        self._mark_positions_to_market(current_prices)
+        self._log_daily_stats(self.context.get_account_info(), risk_decision)
 
         # Update state
         self.state.last_rebalance = self.state.current_time
@@ -508,6 +527,18 @@ class QuantOrchestrator:
             if md:
                 data[symbol] = md
         return data
+
+    def _mark_positions_to_market(self, current_prices: Dict[str, float]) -> None:
+        """Mark current context positions to latest prices for consistent stats."""
+        if self.context is None:
+            return
+
+        for symbol, price in current_prices.items():
+            pos = self.context.get_position(symbol)
+            if pos is None:
+                continue
+            pos.current_price = price
+            pos.unrealized_pnl = (price - pos.avg_cost) * pos.quantity
 
     def _get_price_array(self, symbol: str) -> Optional[NDArray[np.float64]]:
         """Get price array for a symbol."""
@@ -648,20 +679,55 @@ class QuantOrchestrator:
         self,
         account,
         risk_decision: RiskDecision,
-        target: TargetPortfolio,
     ) -> None:
         """Log daily statistics."""
+        equity = float(account.equity)
+        position_values = [float(p.market_value) for p in account.positions.values()]
+        if abs(equity) > 1e-9:
+            gross_exposure = sum(abs(v) for v in position_values) / abs(equity)
+            net_exposure = sum(position_values) / equity
+        else:
+            gross_exposure = 0.0
+            net_exposure = 0.0
+
         self._daily_stats.append({
             'timestamp': str(self.state.current_time),
-            'equity': account.equity,
-            'cash': account.cash,
-            'gross_exposure': target.gross_exposure,
-            'net_exposure': target.net_exposure,
-            'n_positions': len([p for p in target.positions.values()
-                               if abs(p.target_shares) > 0]),
+            'equity': equity,
+            'cash': float(account.cash),
+            'gross_exposure': float(gross_exposure),
+            'net_exposure': float(net_exposure),
+            'n_positions': len(account.positions),
             'risk_action': risk_decision.action.name,
             'regime': self.state.current_regime.name,
         })
+
+    def _periods_per_year(self, bar_frequency: str) -> float:
+        """Estimate annualization factor from configured bar frequency."""
+        freq = (bar_frequency or "1D").strip().lower().replace(" ", "")
+        match = re.match(r"(\d+)?([a-z]+)", freq)
+        if not match:
+            return 252.0
+
+        step = int(match.group(1) or "1")
+        unit = match.group(2)
+
+        if unit in {"d", "day", "days"}:
+            return 252.0 / step
+        if unit in {"w", "wk", "week", "weeks"}:
+            return 52.0 / step
+        if unit in {"mo", "mon", "month", "months"}:
+            return 12.0 / step
+        if unit in {"h", "hr", "hour", "hours"}:
+            bars_per_day = max(1.0, 6.5 / step)
+            return bars_per_day * 252.0
+        if unit in {"m", "min", "mins", "minute", "minutes"}:
+            bars_per_day = max(1.0, 390.0 / step)
+            return bars_per_day * 252.0
+        if unit in {"s", "sec", "second", "seconds"}:
+            bars_per_day = max(1.0, 23400.0 / step)
+            return bars_per_day * 252.0
+
+        return 252.0
 
     def _reset_state(self) -> None:
         """Reset engine state."""
@@ -700,8 +766,40 @@ class QuantOrchestrator:
             with open(os.path.join(path, 'signals.json'), 'w') as f:
                 json.dump(self._signal_log, f, indent=2)
 
-        # Save trades
+        # Save execution-level events
         if self._trade_log:
+            with open(os.path.join(path, 'execution_events.json'), 'w') as f:
+                json.dump(self._trade_log, f, indent=2)
+
+        # Save realized trade/fill logs from backtest context (if available).
+        if isinstance(self.context, BacktestContext):
+            context_results = self.context.get_results()
+
+            with open(os.path.join(path, 'trades.json'), 'w') as f:
+                json.dump(context_results.get('trades', []), f, indent=2, default=str)
+
+            with open(os.path.join(path, 'fills.json'), 'w') as f:
+                json.dump(context_results.get('fills', []), f, indent=2, default=str)
+
+            summary = {
+                "initial_capital": context_results.get("initial_capital"),
+                "final_equity": context_results.get("final_equity"),
+                "total_return": context_results.get("total_return"),
+                "annualized_return": context_results.get("annualized_return"),
+                "volatility": context_results.get("volatility"),
+                "sharpe_ratio": context_results.get("sharpe_ratio"),
+                "sortino_ratio": context_results.get("sortino_ratio"),
+                "calmar_ratio": context_results.get("calmar_ratio"),
+                "max_drawdown": context_results.get("max_drawdown"),
+                "n_trades": context_results.get("n_trades"),
+                "n_fills": context_results.get("n_fills"),
+                "periods_per_year": context_results.get("periods_per_year"),
+            }
+            with open(os.path.join(path, 'summary.json'), 'w') as f:
+                json.dump(summary, f, indent=2, default=str)
+        elif self._trade_log:
+            # Legacy fallback for live/paper mode where realized-trade data
+            # is not reconstructed from a backtest context.
             with open(os.path.join(path, 'trades.json'), 'w') as f:
                 json.dump(self._trade_log, f, indent=2)
 

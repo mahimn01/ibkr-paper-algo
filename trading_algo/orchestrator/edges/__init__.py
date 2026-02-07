@@ -20,3 +20,10 @@ __all__ = [
     "CrossAssetEngine",
     "TimeOfDayEngine",
 ]
+
+# QuantEdge is optional — requires quant_core (numpy + scipy).
+try:
+    from .quant_edge import QuantEdge  # noqa: F401
+    __all__.append("QuantEdge")
+except ImportError:
+    pass
