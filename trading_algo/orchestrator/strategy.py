@@ -96,6 +96,37 @@ class Orchestrator:
             "SPY", "QQQ", "IWM", "SMH", "XLK", "XLF", "XLE", "XLY", "XLV",
         }
 
+        # ── Trade history for dynamic Kelly sizing ─────────────────────
+        self._trade_returns: list = []  # P&L returns of completed trades
+        self._kelly_calculator = None
+        if self.cfg.sizing.use_kelly:
+            try:
+                from trading_algo.quant_core.portfolio.kelly import (
+                    KellyCriterion,
+                    KellyMode,
+                )
+                mode_map = {
+                    0.125: KellyMode.EIGHTH,
+                    0.25: KellyMode.QUARTER,
+                    0.50: KellyMode.HALF,
+                    0.75: KellyMode.THREE_QUARTER,
+                    1.0: KellyMode.FULL,
+                }
+                frac = self.cfg.sizing.kelly_fraction
+                mode = min(mode_map.items(), key=lambda kv: abs(kv[0] - frac))[1]
+                self._kelly_calculator = KellyCriterion(
+                    mode=mode,
+                    max_position=self.cfg.max_position_pct,
+                    min_samples=self.cfg.sizing.kelly_min_trades,
+                )
+                logger.info(
+                    "Kelly sizing enabled (fraction=%.2f, min_trades=%d)",
+                    frac,
+                    self.cfg.sizing.kelly_min_trades,
+                )
+            except Exception:
+                logger.info("Kelly sizing disabled — quant_core not available")
+
     # ── Data ingestion ────────────────────────────────────────────────
 
     def update_asset(
@@ -391,6 +422,30 @@ class Orchestrator:
         size_multiplier = quality_boost * volatility_scalar
         position_size = min(self.max_position_pct, base_size * size_multiplier)
 
+        # Step 8b: Kelly-criterion override (when enough trade history exists)
+        if (
+            self._kelly_calculator is not None
+            and len(self._trade_returns) >= sc.kelly_min_trades
+        ):
+            kelly_est = self._kelly_calculator.calculate_from_trades(
+                np.array(self._trade_returns, dtype=np.float64),
+            )
+            if kelly_est.position_size > 0 and kelly_est.confidence > 0.3:
+                # Blend: use the larger of static and Kelly, capped at max
+                position_size = min(
+                    self.max_position_pct,
+                    max(position_size, kelly_est.position_size),
+                )
+
+        # Step 8c: Intraday leverage scaling for high-conviction trades
+        if self.cfg.intraday_leverage_mult > 1.0:
+            if regime_conf >= self.cfg.leverage_min_regime_confidence:
+                leverage = min(self.cfg.intraday_leverage_mult, 2.0)
+                position_size = min(
+                    self.max_position_pct * leverage,
+                    position_size * leverage,
+                )
+
         # Step 9: Calculate stops based on ATR
         atr = state.atr
         if atr <= 0:
@@ -527,6 +582,14 @@ class Orchestrator:
             reason = f"End of day close | P&L: {pnl_pct:+.2f}%"
 
         if action in ("sell", "cover"):
+            # Record trade return for Kelly-criterion sizing
+            exit_price = price  # Use current price as fill estimate
+            trade_return = (exit_price - entry_price) * direction / entry_price
+            self._trade_returns.append(trade_return)
+            # Keep a rolling window to prevent stale data from dominating
+            if len(self._trade_returns) > 200:
+                self._trade_returns = self._trade_returns[-200:]
+
             self.last_exit_bar_index[symbol] = len(state.prices)
             del self.positions[symbol]
 
@@ -560,6 +623,26 @@ class Orchestrator:
         """Clear all positions (for warmup)."""
         self.positions.clear()
         self.last_exit_bar_index.clear()
+
+    @property
+    def trade_count(self) -> int:
+        """Number of completed trades recorded for Kelly sizing."""
+        return len(self._trade_returns)
+
+    @property
+    def trade_stats(self) -> Dict[str, float]:
+        """Summary statistics of completed trades."""
+        if not self._trade_returns:
+            return {"count": 0, "win_rate": 0.0, "avg_return": 0.0}
+        returns = self._trade_returns
+        wins = [r for r in returns if r > 0]
+        return {
+            "count": len(returns),
+            "win_rate": len(wins) / len(returns) if returns else 0.0,
+            "avg_return": sum(returns) / len(returns) if returns else 0.0,
+            "avg_win": sum(wins) / len(wins) if wins else 0.0,
+            "avg_loss": sum(r for r in returns if r < 0) / max(1, len(returns) - len(wins)),
+        }
 
 
 def create_orchestrator(config: Optional[OrchestratorConfig] = None) -> Orchestrator:

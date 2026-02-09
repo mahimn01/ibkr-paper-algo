@@ -166,6 +166,7 @@ class OrchestratorAutoTrader:
         max_position_dollars: float = 10000,
         rescan_interval: Optional[int] = None,
         use_dashboard: bool = False,
+        orchestrator_config=None,
     ):
         self.broker = broker
         self.initial_symbols = [s.upper() for s in symbols] if symbols else None
@@ -180,8 +181,8 @@ class OrchestratorAutoTrader:
         self.reference_assets: List[str] = []
         self.all_symbols: List[str] = []
 
-        # Create the orchestrator
-        self.orchestrator = create_orchestrator()
+        # Create the orchestrator (optionally with aggressive config)
+        self.orchestrator = create_orchestrator(orchestrator_config)
 
         # Scanner for finding movers
         self.scanner = IBKRStockScanner(broker)
@@ -701,6 +702,9 @@ Examples:
   python run.py --dashboard --dry-run        # Dashboard in dry-run mode
   python run.py --backtest --symbols SPY     # Run backtest for SPY
   python run.py --backtest --start 2025-01-01 --end 2025-12-31  # Custom date range
+  python run.py --aggressive --dry-run         # Aggressive sizing (25-50%% annual target)
+  python run.py --aggressive --leverage 1.5    # Aggressive + 1.5x leverage
+  python run.py --multi-strategy --dry-run     # Multi-strategy mode (Orchestrator+ORB+Pairs+Momentum)
         """
     )
     parser.add_argument("--symbols", nargs="*", help="Specific symbols to trade (skips scanning)")
@@ -712,6 +716,20 @@ Examples:
     parser.add_argument("--rescan", type=int, help="Rescan for new movers every N minutes")
     parser.add_argument("--port", type=int, default=7497, help="IBKR port (default: 7497)")
     parser.add_argument("--dashboard", action="store_true", help="Run with interactive TUI dashboard")
+
+    # Aggressive mode arguments
+    parser.add_argument("--aggressive", action="store_true",
+                        help="Use aggressive config targeting 25-50%% annual returns "
+                             "(5%% base position, 15%% max, Kelly sizing enabled)")
+    parser.add_argument("--leverage", type=float, default=1.0,
+                        help="Intraday leverage multiplier (1.0-4.0, default: 1.0). "
+                             "Only applied when regime confidence is high. "
+                             "Requires --aggressive flag.")
+
+    # Multi-strategy mode
+    parser.add_argument("--multi-strategy", action="store_true",
+                        help="Run all strategies (Orchestrator + ORB + Pairs + Momentum) "
+                             "under the MultiStrategyController with portfolio-level risk management")
 
     # Backtest arguments
     parser.add_argument("--backtest", action="store_true", help="Run backtest instead of live trading")
@@ -725,6 +743,11 @@ Examples:
     # Check if backtest mode
     if args.backtest:
         _run_backtest(args)
+        return
+
+    # Check if multi-strategy mode
+    if getattr(args, 'multi_strategy', False):
+        _run_multi_strategy(args)
         return
 
     print("=" * 70)
@@ -772,6 +795,23 @@ Examples:
         print("Falling back to console mode.\n")
         args.dashboard = False
 
+    # Build Orchestrator config
+    orch_config = None
+    if args.aggressive:
+        from trading_algo.orchestrator.config import create_aggressive_config
+        leverage = max(1.0, min(args.leverage, 4.0))
+        orch_config = create_aggressive_config(leverage=leverage)
+        print(f"\n** AGGRESSIVE MODE ENABLED **")
+        print(f"  Base position:  {orch_config.sizing.base_size*100:.1f}%")
+        print(f"  Max position:   {orch_config.max_position_pct*100:.1f}%")
+        print(f"  Leverage:       {leverage:.1f}x")
+        print(f"  Kelly sizing:   {'ON' if orch_config.sizing.use_kelly else 'OFF'}")
+        print(f"  ATR stop:       {orch_config.atr_stop_mult:.1f}x")
+        print(f"  ATR target:     {orch_config.atr_target_mult:.1f}x")
+        print()
+    elif args.leverage > 1.0:
+        print("\nWARNING: --leverage requires --aggressive flag. Ignoring leverage.\n")
+
     trader = OrchestratorAutoTrader(
         broker=broker,
         symbols=args.symbols,
@@ -780,6 +820,7 @@ Examples:
         max_position_dollars=args.max_position,
         rescan_interval=args.rescan,
         use_dashboard=args.dashboard,
+        orchestrator_config=orch_config,
     )
 
     # Track shutdown state for graceful exit
@@ -1045,6 +1086,266 @@ def _run_with_dashboard(trader: OrchestratorAutoTrader, broker: IBKRBroker, args
         trading_thread.join(timeout=2.0)
         if trading_thread.is_alive():
             print("  Trading thread did not stop in time")
+
+
+def _run_multi_strategy(args):
+    """Run multi-strategy mode with all strategies under one controller."""
+    from trading_algo.multi_strategy.controller import (
+        MultiStrategyController,
+        ControllerConfig,
+    )
+    from trading_algo.multi_strategy.adapters import (
+        OrchestratorStrategyAdapter,
+        ORBStrategyAdapter,
+        PairsStrategyAdapter,
+        MomentumStrategyAdapter,
+        IntradayMomentumAdapter,
+        ReversalStrategyAdapter,
+        OvernightReturnsAdapter,
+    )
+    from trading_algo.multi_strategy.controller import StrategyAllocation
+
+    print("=" * 70)
+    print("MULTI-STRATEGY PORTFOLIO CONTROLLER")
+    print("7-Strategy Ensemble with Vol Management")
+    print("=" * 70)
+    print()
+    print("Strategies:")
+    print("  1. Orchestrator        (30%) — 6-edge ensemble day trading")
+    print("  2. ORB + VWAP          (10%) — Opening Range Breakout (9:30-10:30)")
+    print("  3. Pairs Trading       (10%) — Statistical arbitrage")
+    print("  4. Pure Momentum       (20%) — Trend following with vol scaling")
+    print("  5. Intraday Momentum   (10%) — Gao et al. 2018 (15:30 entry)")
+    print("  6. Short-Term Reversal (10%) — Jegadeesh 1990 (weekly rebalance)")
+    print("  7. Overnight Returns   (10%) — Close-to-open anomaly")
+    print()
+
+    # Connect to IBKR
+    config = IBKRConfig(host="127.0.0.1", port=args.port, client_id=52)
+    broker = IBKRBroker(config=config, require_paper=True)
+
+    print("Connecting to IBKR...")
+    try:
+        broker.connect()
+        print("Connected!")
+    except Exception as e:
+        print(f"Failed: {e}")
+        sys.exit(1)
+
+    # Build orchestrator config
+    orch_config = None
+    if args.aggressive:
+        from trading_algo.orchestrator.config import create_aggressive_config
+        leverage = max(1.0, min(args.leverage, 4.0))
+        orch_config = create_aggressive_config(leverage=leverage)
+        print(f"\n** AGGRESSIVE MODE ENABLED for Orchestrator **")
+        print(f"  Base position: {orch_config.sizing.base_size*100:.1f}%")
+        print(f"  Max position:  {orch_config.max_position_pct*100:.1f}%")
+        print(f"  Leverage:      {leverage:.1f}x\n")
+
+    # Create strategy adapters
+    orchestrator_adapter = OrchestratorStrategyAdapter(orch_config)
+    orb_adapter = ORBStrategyAdapter(vwap_filter=True)
+    pairs_adapter = PairsStrategyAdapter()
+    momentum_adapter = MomentumStrategyAdapter()
+    intraday_mom_adapter = IntradayMomentumAdapter()
+    reversal_adapter = ReversalStrategyAdapter()
+    overnight_adapter = OvernightReturnsAdapter()
+
+    # Create controller with 7-strategy allocations
+    controller_config = ControllerConfig(
+        allocations={
+            "Orchestrator": StrategyAllocation(weight=0.30, max_positions=8),
+            "ORB": StrategyAllocation(weight=0.10, max_positions=5),
+            "PairsTrading": StrategyAllocation(weight=0.10, max_positions=6),
+            "PureMomentum": StrategyAllocation(weight=0.20, max_positions=10),
+            "IntradayMomentum": StrategyAllocation(weight=0.10, max_positions=5),
+            "ShortTermReversal": StrategyAllocation(weight=0.10, max_positions=10),
+            "OvernightReturns": StrategyAllocation(weight=0.10, max_positions=5),
+        },
+        enable_vol_management=True,
+    )
+    controller = MultiStrategyController(controller_config)
+    controller.register(orchestrator_adapter)
+    controller.register(orb_adapter)
+    controller.register(pairs_adapter)
+    controller.register(momentum_adapter)
+    controller.register(intraday_mom_adapter)
+    controller.register(reversal_adapter)
+    controller.register(overnight_adapter)
+
+    print(f"Controller active with {len(controller.strategies)} strategies")
+    print(f"Max gross exposure: {controller_config.max_gross_exposure:.0%}")
+    print(f"Vol management: {'ON' if controller_config.enable_vol_management else 'OFF'}")
+    print(f"Dry run: {args.dry_run}")
+    print()
+
+    # Get account value
+    try:
+        account = broker.get_account_snapshot()
+        account_value = account.values.get('NetLiquidation', 100_000)
+        print(f"Account Value: ${account_value:,.2f}")
+    except Exception as e:
+        account_value = 100_000
+        print(f"Could not get account value: {e}")
+
+    # Determine symbols
+    if args.symbols:
+        trading_symbols = [s.upper() for s in args.symbols]
+    else:
+        scanner = IBKRStockScanner(broker)
+        try:
+            result = scanner.scan_todays_movers(top_n=args.top * 2)
+            trading_symbols = [c.symbol for c in result.candidates[:args.top]]
+            if not trading_symbols:
+                trading_symbols = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"][:args.top]
+        except Exception:
+            trading_symbols = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"][:args.top]
+
+    reference_assets = list(set(CORE_REFERENCE_ASSETS + get_sector_etfs_for_symbols(trading_symbols)))
+    all_symbols = list(set(trading_symbols + reference_assets))
+    print(f"Trading: {', '.join(trading_symbols)}")
+    print(f"Reference: {', '.join(reference_assets)}")
+
+    # Warm up all strategies with historical data
+    print("\nWarming up all strategies...")
+    for i, symbol in enumerate(all_symbols):
+        try:
+            instrument = InstrumentSpec(kind="STK", symbol=symbol, exchange="SMART", currency="USD")
+            bars = broker.get_historical_bars(
+                instrument, duration="2 D", bar_size="5 mins",
+                what_to_show="TRADES", use_rth=True,
+            )
+            print(f"  [{i+1}/{len(all_symbols)}] {symbol}: {len(bars)} bars")
+            for bar in bars:
+                ts = datetime.fromtimestamp(bar.timestamp_epoch_s)
+                controller.update(symbol, ts, bar.open, bar.high, bar.low, bar.close, bar.volume or 0)
+        except Exception as e:
+            print(f"  Warning: Could not warm up {symbol}: {e}")
+        time.sleep(0.5)
+
+    print("Warmup complete!")
+    active = [s.name for s in controller.active_strategies]
+    print(f"Active strategies: {', '.join(active) if active else 'none yet (still warming up)'}")
+
+    # Main trading loop
+    print("\n" + "=" * 70)
+    print("MULTI-STRATEGY TRADING STARTED - Press Ctrl+C to stop")
+    print("=" * 70)
+
+    running = True
+    last_bar_time: Dict[str, datetime] = {}
+    signals_generated = 0
+    trades_executed = 0
+
+    def signal_handler(sig, frame):
+        nonlocal running
+        print("\n\nShutting down...")
+        running = False
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    try:
+        while running:
+            now = datetime.now().time()
+            if now >= dt_time(16, 5):
+                print("\nMarket closed.")
+                break
+
+            # Update all symbols
+            for symbol in all_symbols:
+                try:
+                    instrument = InstrumentSpec(kind="STK", symbol=symbol, exchange="SMART", currency="USD")
+                    bars = broker.get_historical_bars(
+                        instrument, duration="1800 S", bar_size="5 mins",
+                        what_to_show="TRADES", use_rth=True,
+                    )
+                    if not bars:
+                        continue
+                    for bar in bars:
+                        ts = datetime.fromtimestamp(bar.timestamp_epoch_s)
+                        if symbol in last_bar_time and ts <= last_bar_time[symbol]:
+                            continue
+                        controller.update(symbol, ts, bar.open, bar.high, bar.low, bar.close, bar.volume or 0)
+                        last_bar_time[symbol] = ts
+                except Exception as e:
+                    if "pacing" not in str(e).lower():
+                        print(f"  Error updating {symbol}: {e}")
+
+            # Generate signals
+            ts_now = datetime.now()
+            signals = controller.generate_signals(trading_symbols, ts_now, account_value)
+
+            if signals:
+                for sig in signals:
+                    if sig.is_entry:
+                        action = "LONG" if sig.direction > 0 else "SHORT"
+                        print(f"\n>>> {action} {sig.symbol} | weight={sig.target_weight:.3f} "
+                              f"conf={sig.confidence:.2f} | {sig.strategy_name} [{sig.trade_type}]")
+                        if sig.stop_loss:
+                            print(f"    Stop: ${sig.stop_loss:.2f}  Target: ${sig.take_profit:.2f}" if sig.take_profit else f"    Stop: ${sig.stop_loss:.2f}")
+                        signals_generated += 1
+
+                        if not args.dry_run:
+                            # Execute the signal
+                            try:
+                                price = sig.entry_price or 0
+                                if price > 0:
+                                    position_value = account_value * sig.target_weight
+                                    position_value = min(position_value, args.max_position)
+                                    quantity = int(position_value / price)
+                                    if quantity > 0:
+                                        inst = InstrumentSpec(kind="STK", symbol=sig.symbol, exchange="SMART", currency="USD")
+                                        side = "BUY" if sig.direction > 0 else "SELL"
+                                        order = OrderRequest(instrument=inst, side=side, quantity=quantity, order_type="MKT", tif="DAY")
+                                        result = broker.place_order(order)
+                                        trades_executed += 1
+                                        print(f"    Executed: {quantity} shares, Order ID: {result.order_id}")
+                            except Exception as e:
+                                print(f"    Execution error: {e}")
+                    elif sig.is_exit:
+                        print(f"    EXIT {sig.symbol} | {sig.strategy_name}")
+
+            # Status
+            active_strats = [s.name for s in controller.active_strategies]
+            status = controller.get_status()
+            print(f"\n[{ts_now.strftime('%H:%M:%S')}] Strategies: {', '.join(active_strats)} | "
+                  f"Signals: {signals_generated} | Trades: {trades_executed} | "
+                  f"Exposure: {status['gross_exposure']:.1%}")
+
+            # Sleep with early break
+            for _ in range(args.interval):
+                if not running:
+                    break
+                time.sleep(1)
+
+    finally:
+        print("\n" + "=" * 70)
+        print("MULTI-STRATEGY SESSION COMPLETE")
+        print("=" * 70)
+        print(f"Signals: {signals_generated}")
+        print(f"Trades:  {trades_executed}")
+        status = controller.get_status()
+        for name, info in status['strategies'].items():
+            print(f"  {name}: {info['state']} | exposure={info['exposure']:.2%}")
+        print("=" * 70)
+
+        try:
+            disconnect_done = threading.Event()
+            def disconnect_broker():
+                try:
+                    broker.disconnect()
+                except Exception:
+                    pass
+                finally:
+                    disconnect_done.set()
+            t = threading.Thread(target=disconnect_broker, daemon=True)
+            t.start()
+            if not disconnect_done.wait(timeout=3.0):
+                _force_cleanup(broker)
+        except Exception:
+            pass
 
 
 def _run_backtest(args):

@@ -19,6 +19,10 @@ from .models import (
     EquityPoint,
     BacktestConfig,
     BacktestResults,
+    CostProfile,
+    IBKR_TIERED_COSTS,
+    IBKR_FIXED_COSTS,
+    CONSERVATIVE_COSTS,
 )
 from .engine import BacktestEngine
 from .data_provider import DataProvider, DataRequest
@@ -34,6 +38,11 @@ __all__ = [
     "EquityPoint",
     "BacktestConfig",
     "BacktestResults",
+    # Cost profiles
+    "CostProfile",
+    "IBKR_TIERED_COSTS",
+    "IBKR_FIXED_COSTS",
+    "CONSERVATIVE_COSTS",
     # Engine
     "BacktestEngine",
     # Data

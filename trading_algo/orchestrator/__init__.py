@@ -81,6 +81,8 @@ from .types import (
     AssetState,
 )
 
+from .config import OrchestratorConfig, create_aggressive_config
+
 from .strategy import Orchestrator, create_orchestrator
 
 from .edges import (
@@ -100,6 +102,9 @@ __all__ = [
     "EdgeSignal",
     "OrchestratorSignal",
     "AssetState",
+    # Config
+    "OrchestratorConfig",
+    "create_aggressive_config",
     # Main strategy
     "Orchestrator",
     "create_orchestrator",
