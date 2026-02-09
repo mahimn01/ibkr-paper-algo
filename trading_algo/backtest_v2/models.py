@@ -406,6 +406,38 @@ class EquityPoint:
 
 
 @dataclass
+class CostProfile:
+    """Transaction cost profile for backtesting."""
+    commission_per_share: float
+    min_commission: float
+    slippage_pct: float
+    name: str = "custom"
+
+
+# Pre-built cost profiles for common brokers
+IBKR_TIERED_COSTS = CostProfile(
+    commission_per_share=0.0035,
+    min_commission=0.35,
+    slippage_pct=0.0002,  # 2bp for liquid large-caps
+    name="IBKR Tiered (US Equities)",
+)
+
+IBKR_FIXED_COSTS = CostProfile(
+    commission_per_share=0.005,
+    min_commission=1.0,
+    slippage_pct=0.0003,  # 3bp general estimate
+    name="IBKR Fixed (US Equities)",
+)
+
+CONSERVATIVE_COSTS = CostProfile(
+    commission_per_share=0.005,
+    min_commission=1.0,
+    slippage_pct=0.0005,  # 5bp conservative
+    name="Conservative Estimate",
+)
+
+
+@dataclass
 class BacktestConfig:
     """Configuration for a backtest run."""
     # Strategy
@@ -425,7 +457,7 @@ class BacktestConfig:
     position_size_pct: float = 0.02  # 2% per position
     max_positions: int = 5
 
-    # Costs
+    # Costs (defaults match IBKR Fixed pricing)
     commission_per_share: float = 0.005
     min_commission: float = 1.0
     slippage_pct: float = 0.0005  # 0.05%
@@ -437,6 +469,22 @@ class BacktestConfig:
     # Risk
     max_daily_loss_pct: float = 0.05  # 5% daily loss limit
     max_drawdown_pct: float = 0.20   # 20% max drawdown
+
+    @classmethod
+    def with_cost_profile(
+        cls,
+        strategy_name: str,
+        cost_profile: CostProfile,
+        **kwargs,
+    ) -> "BacktestConfig":
+        """Create a config with a specific cost profile applied."""
+        return cls(
+            strategy_name=strategy_name,
+            commission_per_share=cost_profile.commission_per_share,
+            min_commission=cost_profile.min_commission,
+            slippage_pct=cost_profile.slippage_pct,
+            **kwargs,
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         return {

@@ -166,6 +166,7 @@ class OrchestratorAutoTrader:
         max_position_dollars: float = 10000,
         rescan_interval: Optional[int] = None,
         use_dashboard: bool = False,
+        orchestrator_config=None,
     ):
         self.broker = broker
         self.initial_symbols = [s.upper() for s in symbols] if symbols else None
@@ -180,8 +181,8 @@ class OrchestratorAutoTrader:
         self.reference_assets: List[str] = []
         self.all_symbols: List[str] = []
 
-        # Create the orchestrator
-        self.orchestrator = create_orchestrator()
+        # Create the orchestrator (optionally with aggressive config)
+        self.orchestrator = create_orchestrator(orchestrator_config)
 
         # Scanner for finding movers
         self.scanner = IBKRStockScanner(broker)
@@ -701,6 +702,8 @@ Examples:
   python run.py --dashboard --dry-run        # Dashboard in dry-run mode
   python run.py --backtest --symbols SPY     # Run backtest for SPY
   python run.py --backtest --start 2025-01-01 --end 2025-12-31  # Custom date range
+  python run.py --aggressive --dry-run         # Aggressive sizing (25-50%% annual target)
+  python run.py --aggressive --leverage 1.5    # Aggressive + 1.5x leverage
         """
     )
     parser.add_argument("--symbols", nargs="*", help="Specific symbols to trade (skips scanning)")
@@ -712,6 +715,15 @@ Examples:
     parser.add_argument("--rescan", type=int, help="Rescan for new movers every N minutes")
     parser.add_argument("--port", type=int, default=7497, help="IBKR port (default: 7497)")
     parser.add_argument("--dashboard", action="store_true", help="Run with interactive TUI dashboard")
+
+    # Aggressive mode arguments
+    parser.add_argument("--aggressive", action="store_true",
+                        help="Use aggressive config targeting 25-50%% annual returns "
+                             "(5%% base position, 15%% max, Kelly sizing enabled)")
+    parser.add_argument("--leverage", type=float, default=1.0,
+                        help="Intraday leverage multiplier (1.0-4.0, default: 1.0). "
+                             "Only applied when regime confidence is high. "
+                             "Requires --aggressive flag.")
 
     # Backtest arguments
     parser.add_argument("--backtest", action="store_true", help="Run backtest instead of live trading")
@@ -772,6 +784,23 @@ Examples:
         print("Falling back to console mode.\n")
         args.dashboard = False
 
+    # Build Orchestrator config
+    orch_config = None
+    if args.aggressive:
+        from trading_algo.orchestrator.config import create_aggressive_config
+        leverage = max(1.0, min(args.leverage, 4.0))
+        orch_config = create_aggressive_config(leverage=leverage)
+        print(f"\n** AGGRESSIVE MODE ENABLED **")
+        print(f"  Base position:  {orch_config.sizing.base_size*100:.1f}%")
+        print(f"  Max position:   {orch_config.max_position_pct*100:.1f}%")
+        print(f"  Leverage:       {leverage:.1f}x")
+        print(f"  Kelly sizing:   {'ON' if orch_config.sizing.use_kelly else 'OFF'}")
+        print(f"  ATR stop:       {orch_config.atr_stop_mult:.1f}x")
+        print(f"  ATR target:     {orch_config.atr_target_mult:.1f}x")
+        print()
+    elif args.leverage > 1.0:
+        print("\nWARNING: --leverage requires --aggressive flag. Ignoring leverage.\n")
+
     trader = OrchestratorAutoTrader(
         broker=broker,
         symbols=args.symbols,
@@ -780,6 +809,7 @@ Examples:
         max_position_dollars=args.max_position,
         rescan_interval=args.rescan,
         use_dashboard=args.dashboard,
+        orchestrator_config=orch_config,
     )
 
     # Track shutdown state for graceful exit
