@@ -89,6 +89,16 @@ class ControllerConfig:
         - 'net': Sum directional weights and go with the net direction.
     """
 
+    # ── Regime-adaptive allocation (Phase 5) ───────────────────────────
+    enable_regime_adaptation: bool = False
+    """When True, dynamically reweight strategy allocations based on
+    the current HMM market regime.  Overweight strategies that
+    historically perform well in the detected regime."""
+
+    regime_blend_factor: float = 0.5
+    """Blend factor between static and regime-adaptive weights.
+    0.0 = fully static, 1.0 = fully regime-adaptive."""
+
     # ── Risk integration ────────────────────────────────────────────────
     enable_risk_controller: bool = True
     """When True, run quant_core RiskController before emitting signals."""
@@ -150,6 +160,12 @@ class MultiStrategyController:
 
         # Returns history for risk controller
         self._returns: List[float] = []
+
+        # Regime detection (Phase 5)
+        self._current_regime: str = "NEUTRAL"
+        self._regime_weights: Dict[str, Dict[str, float]] = {}
+        self._price_history_for_regime: List[float] = []  # SPY-like proxy
+        self._hmm_model = None  # Lazy-loaded
 
     # ── Registration ────────────────────────────────────────────────────
 
@@ -281,12 +297,28 @@ class MultiStrategyController:
         self,
         signals: List[StrategySignal],
     ) -> List[StrategySignal]:
-        """Scale each signal's target_weight by the strategy's allocation."""
+        """Scale each signal's target_weight by the strategy's allocation.
+
+        If regime adaptation is enabled, blends static allocations with
+        regime-conditional weights based on the current detected regime.
+        """
         scaled: List[StrategySignal] = []
+
+        # Get regime-adaptive weight overrides (if enabled)
+        regime_overrides = self._get_regime_adaptive_weights()
 
         for sig in signals:
             alloc = self._get_allocation(sig.strategy_name)
-            scaled_weight = sig.target_weight * alloc.weight
+            static_weight = alloc.weight
+
+            if regime_overrides and sig.strategy_name in regime_overrides:
+                dynamic_weight = regime_overrides[sig.strategy_name]
+                blend = self.config.regime_blend_factor
+                effective_weight = (1 - blend) * static_weight + blend * dynamic_weight
+            else:
+                effective_weight = static_weight
+
+            scaled_weight = sig.target_weight * effective_weight
 
             scaled.append(StrategySignal(
                 strategy_name=sig.strategy_name,
@@ -302,6 +334,75 @@ class MultiStrategyController:
             ))
 
         return scaled
+
+    def _get_regime_adaptive_weights(self) -> Optional[Dict[str, float]]:
+        """
+        Compute regime-adaptive strategy weights.
+
+        Uses HMM regime detection (when available) to look up
+        pre-computed regime-conditional weight tables.
+        """
+        if not self.config.enable_regime_adaptation:
+            return None
+
+        # Check for pre-loaded regime weights
+        if self._current_regime in self._regime_weights:
+            return self._regime_weights[self._current_regime]
+
+        # Fall back to default regime tilts from regime_analysis
+        try:
+            from trading_algo.multi_strategy.regime_analysis import RegimeAnalyzer
+            defaults = RegimeAnalyzer.DEFAULT_REGIME_TILTS
+            return defaults.get(self._current_regime, defaults.get("NEUTRAL"))
+        except Exception:
+            return None
+
+    def set_regime(self, regime: str) -> None:
+        """Manually set the current market regime."""
+        self._current_regime = regime
+
+    def set_regime_weights(self, weights: Dict[str, Dict[str, float]]) -> None:
+        """Load regime-conditional weight tables (from RegimeAnalyzer output)."""
+        self._regime_weights = weights
+
+    def detect_regime(self) -> str:
+        """
+        Detect the current market regime from price history.
+
+        Returns the regime label string.
+        """
+        if len(self._returns) < 60:
+            return "NEUTRAL"
+
+        try:
+            from trading_algo.quant_core.models.hmm_regime import (
+                HiddenMarkovRegime,
+            )
+
+            if self._hmm_model is None:
+                self._hmm_model = HiddenMarkovRegime(n_states=3, lookback=252)
+
+            returns_arr = np.array(self._returns[-252:], dtype=np.float64)
+            prices = np.cumprod(1 + returns_arr) * 100  # Synthetic price
+
+            self._hmm_model.fit(prices, returns_arr)
+            state = self._hmm_model.predict_regime(prices, returns_arr)
+            self._current_regime = state.regime.name
+            return self._current_regime
+
+        except Exception as e:
+            logger.debug("Regime detection failed: %s", e)
+            # Simple fallback: use return momentum
+            recent = np.array(self._returns[-20:])
+            if np.mean(recent) > 0.001:
+                self._current_regime = "BULL"
+            elif np.mean(recent) < -0.001:
+                self._current_regime = "BEAR"
+            elif np.std(recent) > 0.02:
+                self._current_regime = "HIGH_VOL"
+            else:
+                self._current_regime = "NEUTRAL"
+            return self._current_regime
 
     # ── Step 3: Conflict resolution ─────────────────────────────────────
 
