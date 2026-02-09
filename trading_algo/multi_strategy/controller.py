@@ -99,6 +99,18 @@ class ControllerConfig:
     daily_loss_limit: float = 0.03
     """Stop trading for the day if portfolio loses more than this %."""
 
+    # ── Volatility management (Moreira & Muir 2017) ─────────────────────
+    enable_vol_management: bool = True
+    """Scale total exposure inversely with realized volatility.
+    Based on Moreira & Muir (2017, JoF) 'Volatility-Managed Portfolios'.
+    Improves Sharpe ratio by ~50% across asset classes."""
+
+    vol_target: float = 0.15
+    """Target annualized portfolio volatility (15%)."""
+
+    vol_lookback: int = 20
+    """Number of daily returns for realized vol estimate."""
+
 
 # ────────────────────────────────────────────────────────────────────────────
 # Controller
@@ -202,6 +214,7 @@ class MultiStrategyController:
         3. Resolve conflicts.
         4. Apply portfolio-level limits.
         5. Apply risk checks.
+        6. Apply vol management (Moreira & Muir 2017).
 
         Returns:
             List of risk-checked, conflict-resolved StrategySignals
@@ -229,7 +242,10 @@ class MultiStrategyController:
         limited = self._apply_portfolio_limits(resolved)
 
         # Step 5 — risk checks
-        final = self._apply_risk_checks(limited)
+        risk_checked = self._apply_risk_checks(limited)
+
+        # Step 6 — vol management
+        final = self._apply_vol_management(risk_checked)
 
         return final
 
@@ -552,6 +568,64 @@ class MultiStrategyController:
             return [s for s in signals if s.is_exit]
 
         return signals
+
+    # ── Step 6: Volatility management ──────────────────────────────────
+
+    def _apply_vol_management(
+        self,
+        signals: List[StrategySignal],
+    ) -> List[StrategySignal]:
+        """
+        Moreira & Muir (2017) volatility management.
+
+        Scale all entry signal weights inversely with realized portfolio
+        volatility.  When vol is high, reduce exposure; when vol is low,
+        increase exposure.  Improves Sharpe by ~50%.
+        """
+        if not self.config.enable_vol_management:
+            return signals
+
+        if len(self._returns) < self.config.vol_lookback:
+            return signals  # Not enough history
+
+        recent = np.array(self._returns[-self.config.vol_lookback:])
+        realized_vol = float(np.std(recent, ddof=1) * np.sqrt(252))
+
+        if realized_vol <= 0:
+            return signals
+
+        vol_scalar = min(2.0, max(0.25, self.config.vol_target / realized_vol))
+
+        if abs(vol_scalar - 1.0) < 0.05:
+            return signals  # No meaningful adjustment
+
+        logger.debug(
+            "Vol management: realized=%.1f%% target=%.1f%% scalar=%.2f",
+            realized_vol * 100, self.config.vol_target * 100, vol_scalar,
+        )
+
+        return [
+            StrategySignal(
+                strategy_name=s.strategy_name,
+                symbol=s.symbol,
+                direction=s.direction,
+                target_weight=s.target_weight * vol_scalar if s.is_entry else s.target_weight,
+                confidence=s.confidence,
+                stop_loss=s.stop_loss,
+                take_profit=s.take_profit,
+                entry_price=s.entry_price,
+                trade_type=s.trade_type,
+                metadata=s.metadata,
+            )
+            for s in signals
+        ]
+
+    def add_return(self, daily_return: float) -> None:
+        """Record a daily portfolio return for vol management."""
+        self._returns.append(daily_return)
+        # Keep bounded
+        if len(self._returns) > 504:
+            self._returns = self._returns[-504:]
 
     # ── External risk integration ───────────────────────────────────────
 

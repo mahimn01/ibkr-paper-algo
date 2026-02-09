@@ -1099,18 +1099,25 @@ def _run_multi_strategy(args):
         ORBStrategyAdapter,
         PairsStrategyAdapter,
         MomentumStrategyAdapter,
+        IntradayMomentumAdapter,
+        ReversalStrategyAdapter,
+        OvernightReturnsAdapter,
     )
+    from trading_algo.multi_strategy.controller import StrategyAllocation
 
     print("=" * 70)
     print("MULTI-STRATEGY PORTFOLIO CONTROLLER")
-    print("Orchestrator + ORB + Pairs Trading + Pure Momentum")
+    print("7-Strategy Ensemble with Vol Management")
     print("=" * 70)
     print()
     print("Strategies:")
-    print("  1. Orchestrator   (40%) — 6-edge ensemble day trading")
-    print("  2. ORB            (15%) — Opening Range Breakout (9:30-10:30)")
-    print("  3. Pairs Trading  (15%) — Statistical arbitrage")
-    print("  4. Pure Momentum  (30%) — Trend following with vol scaling")
+    print("  1. Orchestrator        (30%) — 6-edge ensemble day trading")
+    print("  2. ORB + VWAP          (10%) — Opening Range Breakout (9:30-10:30)")
+    print("  3. Pairs Trading       (10%) — Statistical arbitrage")
+    print("  4. Pure Momentum       (20%) — Trend following with vol scaling")
+    print("  5. Intraday Momentum   (10%) — Gao et al. 2018 (15:30 entry)")
+    print("  6. Short-Term Reversal (10%) — Jegadeesh 1990 (weekly rebalance)")
+    print("  7. Overnight Returns   (10%) — Close-to-open anomaly")
     print()
 
     # Connect to IBKR
@@ -1138,20 +1145,38 @@ def _run_multi_strategy(args):
 
     # Create strategy adapters
     orchestrator_adapter = OrchestratorStrategyAdapter(orch_config)
-    orb_adapter = ORBStrategyAdapter()
+    orb_adapter = ORBStrategyAdapter(vwap_filter=True)
     pairs_adapter = PairsStrategyAdapter()
     momentum_adapter = MomentumStrategyAdapter()
+    intraday_mom_adapter = IntradayMomentumAdapter()
+    reversal_adapter = ReversalStrategyAdapter()
+    overnight_adapter = OvernightReturnsAdapter()
 
-    # Create controller
-    controller_config = ControllerConfig()
+    # Create controller with 7-strategy allocations
+    controller_config = ControllerConfig(
+        allocations={
+            "Orchestrator": StrategyAllocation(weight=0.30, max_positions=8),
+            "ORB": StrategyAllocation(weight=0.10, max_positions=5),
+            "PairsTrading": StrategyAllocation(weight=0.10, max_positions=6),
+            "PureMomentum": StrategyAllocation(weight=0.20, max_positions=10),
+            "IntradayMomentum": StrategyAllocation(weight=0.10, max_positions=5),
+            "ShortTermReversal": StrategyAllocation(weight=0.10, max_positions=10),
+            "OvernightReturns": StrategyAllocation(weight=0.10, max_positions=5),
+        },
+        enable_vol_management=True,
+    )
     controller = MultiStrategyController(controller_config)
     controller.register(orchestrator_adapter)
     controller.register(orb_adapter)
     controller.register(pairs_adapter)
     controller.register(momentum_adapter)
+    controller.register(intraday_mom_adapter)
+    controller.register(reversal_adapter)
+    controller.register(overnight_adapter)
 
     print(f"Controller active with {len(controller.strategies)} strategies")
     print(f"Max gross exposure: {controller_config.max_gross_exposure:.0%}")
+    print(f"Vol management: {'ON' if controller_config.enable_vol_management else 'OFF'}")
     print(f"Dry run: {args.dry_run}")
     print()
 
