@@ -57,8 +57,11 @@ class SourcePerformance:
 
     @property
     def sharpe(self) -> float:
-        if not self.returns or self.variance == 0:
+        if not self.returns:
             return 0.0
+        if self.variance == 0:
+            # Zero variance with positive mean return implies a perfect signal.
+            return 10.0 if self.mean_return > 0 else (-10.0 if self.mean_return < 0 else 0.0)
         return self.mean_return / math.sqrt(self.variance) * math.sqrt(252)
 
     @property
