@@ -785,10 +785,10 @@ class TestRegimeAdaptation:
         result = ctrl.generate_signals(["AAPL"], datetime.now())
 
         assert len(result) == 1
-        # Default BULL tilt for Orchestrator = 0.35
-        # Effective = (1-0.5)*0.40 + 0.5*0.35 = 0.20 + 0.175 = 0.375
-        # Signal = 0.10 * 0.375 = 0.0375
-        assert result[0].target_weight == pytest.approx(0.0375)
+        # Default BULL tilt for Orchestrator = 0.22
+        # Effective = (1-0.5)*0.40 + 0.5*0.22 = 0.20 + 0.11 = 0.31
+        # Signal = 0.10 * 0.31 = 0.031
+        assert result[0].target_weight == pytest.approx(0.031)
 
 
 # ────────────────────────────────────────────────────────────────────────

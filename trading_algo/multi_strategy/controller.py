@@ -59,10 +59,14 @@ class ControllerConfig:
     """
 
     allocations: Dict[str, StrategyAllocation] = field(default_factory=lambda: {
-        "Orchestrator": StrategyAllocation(weight=0.40, max_positions=8),
-        "ORB": StrategyAllocation(weight=0.15, max_positions=5),
-        "PairsTrading": StrategyAllocation(weight=0.15, max_positions=6),
-        "PureMomentum": StrategyAllocation(weight=0.30, max_positions=10),
+        "Orchestrator": StrategyAllocation(weight=0.25, max_positions=8),
+        "ORB": StrategyAllocation(weight=0.08, max_positions=5),
+        "PairsTrading": StrategyAllocation(weight=0.10, max_positions=6),
+        "PureMomentum": StrategyAllocation(weight=0.15, max_positions=10),
+        "RegimeTransition": StrategyAllocation(weight=0.12, max_positions=5),
+        "CrossAssetDivergence": StrategyAllocation(weight=0.10, max_positions=4),
+        "FlowPressure": StrategyAllocation(weight=0.10, max_positions=6),
+        "LiquidityCycles": StrategyAllocation(weight=0.10, max_positions=5),
     })
 
     # ── Portfolio-level limits ──────────────────────────────────────────

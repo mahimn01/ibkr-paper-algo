@@ -226,7 +226,7 @@ class FeatureEngine:
         for window in [20, 50, 200]:
             if len(prices) > window:
                 ma = rolling_mean(prices, window)
-                features[f"price_to_ma{window}"] = prices[window-1:] / ma - 1
+                features[f"price_to_ma{window}"] = prices[window-1:] / ma[window-1:] - 1
 
         # Maximum drawdown (lookback)
         if len(prices) > 20:
@@ -272,7 +272,7 @@ class FeatureEngine:
         if len(returns) > 60:
             vol_short = rolling_std(returns, 10)
             vol_long = rolling_std(returns, 60)
-            vol_ratio = vol_short[50:] / (vol_long + EPSILON)
+            vol_ratio = vol_short[50:] / (vol_long[50:] + EPSILON)
             features["vol_ratio_10_60"] = vol_ratio
 
         # Volatility of volatility
@@ -303,7 +303,7 @@ class FeatureEngine:
         for window in self.volume_windows:
             if len(volumes) > window:
                 avg_vol = rolling_mean(volumes, window)
-                features[f"vol_ratio_{window}d"] = volumes[window-1:] / (avg_vol + EPSILON)
+                features[f"vol_ratio_{window}d"] = volumes[window-1:] / (avg_vol[window-1:] + EPSILON)
 
         # Amihud illiquidity (|return| / volume)
         if len(returns) > 0 and len(volumes) > 1:
@@ -360,7 +360,7 @@ class FeatureEngine:
             std = rolling_std(prices, 20)
             upper = ma + 2 * std
             lower = ma - 2 * std
-            bb_pos = (prices[19:] - lower) / (upper - lower + EPSILON)
+            bb_pos = (prices[19:] - lower[19:]) / (upper[19:] - lower[19:] + EPSILON)
             features["bb_position"] = bb_pos
 
         # ATR (requires high/low)
