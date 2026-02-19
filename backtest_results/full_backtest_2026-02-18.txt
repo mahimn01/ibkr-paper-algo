@@ -1,0 +1,128 @@
+
+==============================================================================
+  TRADING ALGORITHM BACKTEST SUITE
+==============================================================================
+  Date: 2026-02-18 23:05:44
+  Python: 3.14.2
+  Available symbols: AAPL, GOOGL, IWM, NVDA, QQQ, SMCI, SPY
+
+==============================================================================
+  LOADING DATA
+==============================================================================
+  Loading daily data for: SPY, QQQ, IWM, AAPL, NVDA
+    SPY: 522 daily bars
+    QQQ: 522 daily bars
+    IWM: 522 daily bars
+    AAPL: 252 daily bars
+    NVDA: 252 daily bars
+    [DROP] AAPL: only 252 bars (need 261)
+    [DROP] NVDA: only 252 bars (need 261)
+  Daily bars: 522 days, 2024-01-02 to 2026-01-30
+  Loading 5-min data for: SPY, QQQ, AAPL
+  5-min bars: 40500 bars, 2024-01-02 to 2026-01-30
+
+==============================================================================
+  BACKTEST 1: REGIME TRANSITION STRATEGY
+==============================================================================
+  Completed in 2.9s
+
+  Regime Transition (SPY/QQQ/IWM)
+  ──────────────────────────────────────────────────
+  Total Return:                   +2.89%
+  Annualized Return:              +1.39%
+  Sharpe Ratio:                   -0.111
+  Sortino Ratio:                  +0.000
+  Max Drawdown:                   -7.70%
+  Volatility:                     +0.00%
+  Total Trades:                      191
+  Win Rate:                       +0.00%
+
+==============================================================================
+  BACKTEST 2: CROSS-ASSET DIVERGENCE STRATEGY
+==============================================================================
+  Completed in 57.6s
+
+  Cross-Asset Divergence
+  ──────────────────────────────────────────────────
+  Total Return:                   -0.98%
+  Annualized Return:              -0.48%
+  Sharpe Ratio:                   -2.981
+  Sortino Ratio:                  -1.527
+  Max Drawdown:                   -1.50%
+  Volatility:                     +0.83%
+  Total Trades:                       62
+  Win Rate:                      +42.31%
+
+==============================================================================
+  BACKTEST 3: FLOW PRESSURE STRATEGY
+==============================================================================
+  Completed in 0.0s
+
+  Flow Pressure (Turn-of-Month, Quarter-End, Expiry)
+  ──────────────────────────────────────────────────
+  Total Return:                   -1.01%
+  Annualized Return:              -0.49%
+  Sharpe Ratio:                   -2.225
+  Sortino Ratio:                  +0.000
+  Max Drawdown:                   -1.45%
+  Volatility:                     +1.12%
+  Total Trades:                      371
+  Win Rate:                      +33.33%
+
+==============================================================================
+  BACKTEST 4: INTRADAY LIQUIDITY CYCLES
+==============================================================================
+  Completed in 0.2s
+
+  Liquidity Cycles (SPY 5-min)
+  ──────────────────────────────────────────────────
+  Total Return:                   +0.00%
+  Annualized Return:              +0.00%
+  Sharpe Ratio:                   +0.003
+  Sortino Ratio:                  +0.001
+  Max Drawdown:                   -0.17%
+  Volatility:                     +0.00%
+  Total Trades:                      484
+  Win Rate:                      +51.03%
+
+==============================================================================
+  BACKTEST 5: FULL MULTI-STRATEGY CONTROLLER
+==============================================================================
+  Registered 7 strategies: Orchestrator, ORB, PureMomentum, RegimeTransition, CrossAssetDivergence, FlowPressure, LiquidityCycles
+  [  5.0%] Processing 121500 bars across 3 symbols                       [  5.0%] Bar 0/121500                                                  [  9.5%] Bar 6076/121500                                               [ 14.0%] Bar 12152/121500                                              [ 18.5%] Bar 18228/121500                                              [ 23.0%] Bar 24304/121500                                              [ 27.5%] Bar 30380/121500                                              [ 32.0%] Bar 36456/121500                                              [ 36.5%] Bar 42532/121500                                              [ 41.0%] Bar 48608/121500                                              [ 45.5%] Bar 54684/121500                                              [ 50.0%] Bar 60760/121500                                              [ 54.5%] Bar 66836/121500                                              [ 59.0%] Bar 72912/121500                                              [ 63.5%] Bar 78988/121500                                              [ 68.0%] Bar 85064/121500                                              [ 72.5%] Bar 91140/121500                                              [ 77.0%] Bar 97216/121500                                              [ 81.5%] Bar 103292/121500                                             [ 86.0%] Bar 109368/121500                                             [ 90.5%] Bar 115444/121500                                             [ 95.0%] Computing metrics...                                        
+  Completed in 695.9s
+
+  Combined Multi-Strategy Portfolio
+  ──────────────────────────────────────────────────
+  Total Return:                   +6.63%
+  Annualized Return:              +3.15%
+  Sharpe Ratio:                   +0.539
+  Sortino Ratio:                  +0.653
+  Max Drawdown:                   -1.85%
+  Volatility:                     +2.14%
+  Total Trades:                      997
+  Win Rate:                       +0.00%
+
+  Strategy Signal Attribution:
+  ──────────────────────────────────────────────────
+    FlowPressure                      692 signals
+    PureMomentum                      316 signals
+    Orchestrator                        2 signals
+
+==============================================================================
+  PERFORMANCE SUMMARY
+==============================================================================
+
+  Strategy                        Return   Ann.Ret   Sharpe     MaxDD  Trades  WinRate
+  ────────────────────────────────────────────────────────────────────────────────────────
+  RegimeTransition                +2.89%    +1.39%   -0.111    -7.70%     191   +0.00%
+  CrossAssetDivergence            -0.98%    -0.48%   -2.981    -1.50%      62  +42.31%
+  FlowPressure                    -1.01%    -0.49%   -2.225    -1.45%     371  +33.33%
+  LiquidityCycles                 +0.00%    +0.00%   +0.003    -0.17%     484  +51.03%
+  ────────────────────────────────────────────────────────────────────────────────────────
+  COMBINED PORTFOLIO              +6.63%    +3.15%   +0.539    -1.85%     997   +0.00%
+
+  Diversification Ratio: -0.41x (Combined Sharpe / Avg Individual Sharpe)
+
+  Total runtime: 757.2s
+==============================================================================

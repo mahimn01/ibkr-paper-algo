@@ -1,0 +1,50 @@
+{
+  "config": {
+    "symbols": [
+      "NVDA"
+    ],
+    "start_date": "2025-01-01",
+    "end_date": "2025-01-31",
+    "initial_capital": 100000,
+    "commission_per_share": 0.005,
+    "slippage_pct": 0.0005,
+    "max_positions": 5,
+    "bar_size": "5 mins"
+  },
+  "metrics": {
+    "total_pnl": -28.51,
+    "total_return": -29.51,
+    "total_return_pct": -0.0295,
+    "annualized_return": -0.3907,
+    "cagr": -0.3907,
+    "sharpe_ratio": -3.64,
+    "sortino_ratio": 0,
+    "calmar_ratio": -0.1,
+    "max_drawdown": 3879.7,
+    "max_drawdown_pct": 3.7359,
+    "volatility": 6.5409,
+    "total_trades": 1,
+    "winning_trades": 0,
+    "losing_trades": 1,
+    "win_rate": 0.0,
+    "profit_factor": 0.0,
+    "expectancy": -28.51,
+    "avg_win": 0,
+    "avg_loss": -28.51,
+    "largest_win": -28.51,
+    "largest_loss": -28.51,
+    "avg_trade": -28.51,
+    "avg_daily_pnl": -1.5,
+    "best_day": 0.0,
+    "worst_day": -28.51,
+    "max_consecutive_wins": 0,
+    "max_consecutive_losses": 1,
+    "avg_hold_time_minutes": 5,
+    "time_in_market_pct": 0.0
+  },
+  "trades_count": 1,
+  "daily_results_count": 19,
+  "equity_points_count": 1482,
+  "drawdown_periods_count": 1,
+  "export_timestamp": "2026-01-31T20:23:49.056102"
+}

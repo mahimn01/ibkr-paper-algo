@@ -1,0 +1,1 @@
+trade_id,symbol,direction,entry_time,exit_time,entry_price,exit_price,quantity,pnl,pnl_pct,commission,slippage,hold_time_minutes,mae,mfe,mae_pct,mfe_pct,exit_reason,signal_strength

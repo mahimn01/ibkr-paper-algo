@@ -1,0 +1,4 @@
+start_date,end_date,recovery_date,duration_days,recovery_days,max_drawdown,max_drawdown_pct,peak_equity,trough_equity
+2026-01-28,2026-02-03,,6,6,3639.66,3.5134,103592.84,99953.17
+2026-02-03,2026-02-03,,0,0,8.75,0.0084,103746.49,103737.74
+2026-02-03,,,0,0,3794.54,3.6574,103749.92,99955.38
