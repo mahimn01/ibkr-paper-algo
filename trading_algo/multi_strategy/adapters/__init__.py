@@ -7,6 +7,10 @@ from .momentum_adapter import MomentumStrategyAdapter
 from .intraday_momentum_adapter import IntradayMomentumAdapter
 from .reversal_adapter import ReversalStrategyAdapter
 from .overnight_adapter import OvernightReturnsAdapter
+from .regime_transition_adapter import RegimeTransitionAdapter
+from .cross_asset_adapter import CrossAssetDivergenceAdapter
+from .flow_pressure_adapter import FlowPressureAdapter
+from .liquidity_cycle_adapter import LiquidityCycleAdapter
 
 __all__ = [
     "OrchestratorStrategyAdapter",
@@ -16,4 +20,8 @@ __all__ = [
     "IntradayMomentumAdapter",
     "ReversalStrategyAdapter",
     "OvernightReturnsAdapter",
+    "RegimeTransitionAdapter",
+    "CrossAssetDivergenceAdapter",
+    "FlowPressureAdapter",
+    "LiquidityCycleAdapter",
 ]
