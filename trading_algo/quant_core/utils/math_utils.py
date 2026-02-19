@@ -97,16 +97,17 @@ def rolling_mean(arr: NDArray[np.float64], window: int) -> NDArray[np.float64]:
     if n < window:
         return result
 
-    # First window
-    window_sum = 0.0
-    for i in range(window):
-        window_sum += arr[i]
-    result[window - 1] = window_sum / window
-
-    # Subsequent windows using sliding
-    for i in range(window, n):
-        window_sum = window_sum - arr[i - window] + arr[i]
-        result[i] = window_sum / window
+    # NaN-tolerant rolling mean: count valid (non-NaN) values per window
+    for i in range(window - 1, n):
+        s = 0.0
+        cnt = 0
+        for j in range(i - window + 1, i + 1):
+            v = arr[j]
+            if not np.isnan(v):
+                s += v
+                cnt += 1
+        if cnt > 0:
+            result[i] = s / cnt
 
     return result
 

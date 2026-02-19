@@ -84,6 +84,10 @@ class MultiStrategyBacktestRunner:
         results = runner.run(data)
     """
 
+    # Risk limits
+    MAX_POSITION_PCT = 0.20   # Max 20% of equity per symbol
+    MAX_GROSS_EXPOSURE = 1.0  # Max 100% gross exposure (no leverage)
+
     def __init__(
         self,
         controller: MultiStrategyController,
@@ -105,6 +109,8 @@ class MultiStrategyBacktestRunner:
         self._timestamps: List[datetime] = []
         self._trades: List[Dict] = []
         self._signals_by_strategy: Dict[str, int] = {}
+        self._winning_trades: int = 0
+        self._closed_trades: int = 0
 
     def run(
         self,
@@ -142,6 +148,8 @@ class MultiStrategyBacktestRunner:
         # Process bars
         total = len(all_bars)
         last_day = None
+        daily_equity_open = self._equity
+        signalled_today = False
 
         for i, (ts, symbol, bar) in enumerate(all_bars):
             o = bar.open if hasattr(bar, 'open') else bar.open_price
@@ -159,29 +167,44 @@ class MultiStrategyBacktestRunner:
 
             # Track daily boundaries
             current_day = ts.date()
-            if last_day is not None and current_day != last_day:
-                # End of day: record daily return
-                if len(self._equity_curve) >= 2 and self._equity_curve[-2] > 0:
-                    daily_ret = (self._equity_curve[-1] / self._equity_curve[-2]) - 1
+            is_new_day = last_day is not None and current_day != last_day
+
+            if is_new_day:
+                # Generate signals once per day (end-of-day) to avoid
+                # excessive churn from intraday re-sizing
+                if not signalled_today and self._equity > 0:
+                    signals = self.controller.generate_signals(
+                        symbols, ts, self._equity
+                    )
+                    self._process_signals(signals, ts)
+
+                # Record equity and daily return
+                self._equity_curve.append(self._equity)
+                self._timestamps.append(ts)
+
+                if daily_equity_open > 0:
+                    daily_ret = (self._equity / daily_equity_open) - 1
                     self._daily_returns.append(daily_ret)
                     self.controller.add_return(daily_ret)
 
                 # Reset daily counters
                 self.controller.new_trading_day()
+                daily_equity_open = self._equity
+                signalled_today = False
 
             last_day = current_day
 
-            # Generate signals periodically (not every bar to avoid churn)
-            if i % len(data) == 0:
-                signals = self.controller.generate_signals(symbols, ts, self._equity)
-                self._process_signals(signals, ts)
-
-            # Record equity
-            self._equity_curve.append(self._equity)
-            self._timestamps.append(ts)
-
             if progress_callback and i % (total // 20 + 1) == 0:
                 progress_callback(0.05 + 0.90 * (i / total), f"Bar {i}/{total}")
+
+        # Final day: close all open positions to realise P&L
+        if all_bars:
+            last_ts = all_bars[-1][0]
+            for sym in list(self._positions):
+                self._close_position(sym, last_ts)
+            self._update_equity()
+            self._equity_curve.append(self._equity)
+            self._timestamps.append(last_ts)
 
         if progress_callback:
             progress_callback(0.95, "Computing metrics...")
@@ -203,36 +226,68 @@ class MultiStrategyBacktestRunner:
             self._signals_by_strategy[strategy] = self._signals_by_strategy.get(strategy, 0) + 1
 
     def _open_position(self, sig: StrategySignal, timestamp: datetime) -> None:
-        """Open or add to a position."""
+        """Open or rebalance to a target position with risk limits."""
         price = self._current_prices.get(sig.symbol)
-        if price is None or price <= 0:
+        if price is None or price <= 0 or self._equity <= 0:
             return
 
         # Apply slippage
         slippage = price * (self.config.slippage_bps / 10000)
         exec_price = price + slippage if sig.direction > 0 else price - slippage
 
-        # Compute dollar amount
-        dollar_amount = self._equity * sig.target_weight
-        shares = (dollar_amount / exec_price) * sig.direction
+        # Compute desired dollar amount, capped at MAX_POSITION_PCT
+        weight = min(abs(sig.target_weight), self.MAX_POSITION_PCT)
+        target_dollar = self._equity * weight * sig.direction
 
-        if abs(shares) < 0.01:
+        # Current position value for this symbol
+        current_shares = self._positions.get(sig.symbol, 0.0)
+        current_value = current_shares * price
+
+        # Delta needed to reach target
+        delta_dollar = target_dollar - current_value
+
+        # Check gross exposure limit
+        gross_exposure = sum(
+            abs(s * self._current_prices.get(sym, 0))
+            for sym, s in self._positions.items()
+        )
+        max_new_exposure = self._equity * self.MAX_GROSS_EXPOSURE - gross_exposure
+        if abs(delta_dollar) > max_new_exposure and max_new_exposure > 0:
+            delta_dollar = np.sign(delta_dollar) * max_new_exposure
+        elif max_new_exposure <= 0:
+            return  # At exposure limit
+
+        delta_shares = delta_dollar / exec_price
+        if abs(delta_shares) < 0.01:
             return
 
-        # Commission
-        commission = abs(shares) * self.config.commission_per_share
-        self._cash -= shares * exec_price + commission
+        # Ensure we have enough cash for buys
+        cost = delta_shares * exec_price
+        commission = abs(delta_shares) * self.config.commission_per_share
+        if cost > 0 and cost + commission > self._cash:
+            # Scale down to available cash
+            max_cost = self._cash * 0.95 - commission
+            if max_cost <= 0:
+                return
+            delta_shares = max_cost / exec_price
+            cost = delta_shares * exec_price
+
+        self._cash -= cost + commission
 
         # Update position
-        current_shares = self._positions.get(sig.symbol, 0)
-        self._positions[sig.symbol] = current_shares + shares
-        self._position_prices[sig.symbol] = exec_price
+        new_shares = current_shares + delta_shares
+        if abs(new_shares) < 0.01:
+            self._positions.pop(sig.symbol, None)
+            self._position_prices.pop(sig.symbol, None)
+        else:
+            self._positions[sig.symbol] = new_shares
+            self._position_prices[sig.symbol] = exec_price
 
         self._trades.append({
             "timestamp": timestamp,
             "symbol": sig.symbol,
-            "side": "BUY" if sig.direction > 0 else "SELL",
-            "shares": shares,
+            "side": "BUY" if delta_shares > 0 else "SELL",
+            "shares": delta_shares,
             "price": exec_price,
             "strategy": sig.strategy_name,
         })
@@ -251,7 +306,15 @@ class MultiStrategyBacktestRunner:
         exec_price = price - slippage if shares > 0 else price + slippage
 
         commission = abs(shares) * self.config.commission_per_share
-        self._cash += shares * exec_price - commission
+        proceeds = shares * exec_price - commission
+        self._cash += proceeds
+
+        # Track win/loss
+        entry_price = self._position_prices.get(symbol, exec_price)
+        pnl = (exec_price - entry_price) * shares
+        self._closed_trades += 1
+        if pnl > 0:
+            self._winning_trades += 1
 
         self._trades.append({
             "timestamp": timestamp,
@@ -262,7 +325,7 @@ class MultiStrategyBacktestRunner:
             "strategy": "exit",
         })
 
-        del self._positions[symbol]
+        self._positions.pop(symbol, None)
         self._position_prices.pop(symbol, None)
 
     def _update_equity(self) -> None:
@@ -295,9 +358,10 @@ class MultiStrategyBacktestRunner:
         dd = (peak - ec) / np.where(peak > 0, peak, 1)
         max_dd = float(np.max(dd))
 
-        # Win rate
-        winning = sum(1 for t in self._trades if t.get("side") in ("SELL", "COVER"))
+        # Win rate from closed trades
         total_trades = len(self._trades)
+        win_rate = (self._winning_trades / self._closed_trades
+                    if self._closed_trades > 0 else 0.0)
 
         # Per-strategy attribution
         attribution = {}
@@ -315,6 +379,7 @@ class MultiStrategyBacktestRunner:
             max_drawdown=max_dd,
             volatility=vol,
             total_trades=total_trades,
+            win_rate=win_rate,
             equity_curve=ec.tolist(),
             daily_returns=dr.tolist(),
             timestamps=self._timestamps,
