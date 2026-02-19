@@ -242,6 +242,7 @@ class MultiStrategyController:
         """
         if equity is not None:
             self._equity = equity
+            self._peak_equity = max(self._peak_equity, equity)
 
         # Daily loss circuit breaker
         if self._halted:

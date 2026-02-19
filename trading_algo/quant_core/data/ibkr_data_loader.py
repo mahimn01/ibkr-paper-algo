@@ -48,10 +48,12 @@ def load_ibkr_bars(
     cache_file = cache_dir / pattern
 
     if not cache_file.exists():
-        # Try to find any file for this symbol
+        # Try to find any file for this symbol — prefer the LARGEST file
+        # (most data) rather than most recently modified to avoid picking
+        # small date-range fragments.
         matching = list(cache_dir.glob(f"{symbol}_{bar_size}_*.json"))
         if matching:
-            cache_file = max(matching, key=lambda p: p.stat().st_mtime)
+            cache_file = max(matching, key=lambda p: p.stat().st_size)
             logger.info(f"Using cached file: {cache_file.name}")
         else:
             raise FileNotFoundError(f"No cached data for {symbol}")

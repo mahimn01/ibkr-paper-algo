@@ -489,7 +489,7 @@ class SimpleGaussianHMM:
         self.startprob_ = None
 
     def fit(self, X: NDArray) -> "SimpleGaussianHMM":
-        """Fit HMM using simple EM."""
+        """Fit HMM using K-means initialisation + empirical transitions."""
         n_samples, n_features = X.shape
 
         # Initialize parameters using K-means-like approach
@@ -506,16 +506,20 @@ class SimpleGaussianHMM:
             chunk = X[sorted_indices[start:end]]
 
             self.means_[i] = np.mean(chunk, axis=0)
-            self.covars_[i] = np.cov(chunk, rowvar=False)
+            cov = np.cov(chunk, rowvar=False)
             if n_features == 1:
-                self.covars_[i] = self.covars_[i].reshape(1, 1)
+                cov = cov.reshape(1, 1)
+            # Regularise to avoid singular covariance
+            self.covars_[i] = cov + np.eye(n_features) * 1e-6
 
-        # Initialize transition matrix (slightly sticky)
-        self.transmat_ = np.ones((self.n_states, self.n_states)) * 0.1
-        np.fill_diagonal(self.transmat_, 0.8)
+        # Compute state assignments and derive empirical transition matrix
+        states = self.predict(X)
+        self.transmat_ = np.ones((self.n_states, self.n_states)) * 1e-3  # Laplace prior
+        for t in range(1, len(states)):
+            self.transmat_[states[t - 1], states[t]] += 1.0
         self.transmat_ /= self.transmat_.sum(axis=1, keepdims=True)
 
-        # Uniform start probabilities
+        # Empirical start probabilities
         self.startprob_ = np.ones(self.n_states) / self.n_states
 
         return self
