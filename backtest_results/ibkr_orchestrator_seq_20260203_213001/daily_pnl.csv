@@ -1,0 +1,5 @@
+date,net_pnl,return_pct,trades_taken,trades_won,trades_lost,win_rate,gross_pnl,commissions,starting_equity,ending_equity,max_drawdown,max_drawdown_pct,market_regime
+2026-01-29,-21.46,-0.0225,1,0,1,0.0,-20.46,1.0,99997.6,99975.14,0.0,0.0,
+2026-01-30,-20.96,-0.022,1,0,1,0.0,-19.96,1.0,99975.14,99953.17,0.0,0.0,
+2026-02-02,0.0,0.0,0,0,0,0.0,0.0,0.0,99953.17,99953.17,0.0,0.0,
+2026-02-03,3.2,0.0,1,1,0,100.0,4.2,1.0,99953.17,99953.17,0.0,0.0,

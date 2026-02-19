@@ -1,0 +1,5 @@
+id,symbol,direction,entry_time,exit_time,entry_price,exit_price,quantity,net_pnl,pnl_percent,gross_pnl,commission,slippage,duration_minutes,bars_held,max_adverse_excursion,max_favorable_excursion,exit_reason,signal_confidence,market_regime
+T-00001,AAPL,SHORT,2026-01-28T15:35:00,2026-01-28T15:55:00,256.5117,256.5682,7,-1.4,-0.0777,-0.4,1.0,0.9,20,4,2.72,4.07,End of day,0.58,RANGE_BOUND
+T-00002,AAPL,SHORT,2026-01-29T10:30:00,2026-01-29T15:50:00,255.9919,258.9155,7,-21.46,-1.1978,-20.46,1.0,0.91,320,64,23.51,11.07,Stop loss hit,0.58,TREND_DOWN
+T-00003,AAPL,SHORT,2026-01-30T11:20:00,2026-01-30T14:50:00,256.0119,258.864,7,-20.96,-1.1698,-19.96,1.0,0.91,210,42,19.87,12.12,Stop loss hit,0.57,TREND_DOWN
+T-00004,AAPL,SHORT,2026-02-03T09:55:00,2026-02-03T15:55:00,270.2248,269.6247,7,3.2,0.1692,4.2,1.0,0.94,360,72,11.59,18.3,End of day,0.58,TREND_DOWN

@@ -1,0 +1,12 @@
+[
+  {
+    "timestamp": "2026-02-02 15:52:40.623095",
+    "equity": 100000.0,
+    "cash": 100000.0,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "UNKNOWN"
+  }
+]

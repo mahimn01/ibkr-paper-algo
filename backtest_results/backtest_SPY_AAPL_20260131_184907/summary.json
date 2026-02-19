@@ -1,0 +1,51 @@
+{
+  "config": {
+    "symbols": [
+      "SPY",
+      "AAPL"
+    ],
+    "start_date": "2024-01-01",
+    "end_date": "2025-01-01",
+    "initial_capital": 100000,
+    "commission_per_share": 0.005,
+    "slippage_pct": 0.0005,
+    "max_positions": 5,
+    "bar_size": "5 mins"
+  },
+  "metrics": {
+    "total_pnl": -698.34,
+    "total_return": -880.34,
+    "total_return_pct": -0.8803,
+    "annualized_return": -0.928,
+    "cagr": -0.928,
+    "sharpe_ratio": -4.85,
+    "sortino_ratio": -6.01,
+    "calmar_ratio": -0.2,
+    "max_drawdown": 4790.75,
+    "max_drawdown_pct": 4.6105,
+    "volatility": 9.6177,
+    "total_trades": 182,
+    "winning_trades": 61,
+    "losing_trades": 121,
+    "win_rate": 33.5165,
+    "profit_factor": 0.43,
+    "expectancy": -3.84,
+    "avg_win": 8.58,
+    "avg_loss": -10.09,
+    "largest_win": 27.12,
+    "largest_loss": -25.97,
+    "avg_trade": -3.84,
+    "avg_daily_pnl": -2.94,
+    "best_day": 27.12,
+    "worst_day": -38.19,
+    "max_consecutive_wins": 5,
+    "max_consecutive_losses": 9,
+    "avg_hold_time_minutes": 205.8,
+    "time_in_market_pct": 28.49
+  },
+  "trades_count": 182,
+  "daily_results_count": 239,
+  "equity_points_count": 18571,
+  "drawdown_periods_count": 6,
+  "export_timestamp": "2026-01-31T18:49:07.571510"
+}

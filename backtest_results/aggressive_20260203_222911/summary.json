@@ -1,0 +1,14 @@
+{
+  "initial_capital": 100000.0,
+  "final_equity": 95955.96634851833,
+  "total_return": -0.04044033651481671,
+  "annualized_return": -0.020549899720518905,
+  "volatility": 0.04407010841668844,
+  "sharpe_ratio": -0.4491044276174381,
+  "sortino_ratio": -0.4142655136042576,
+  "calmar_ratio": -0.21893071155938282,
+  "max_drawdown": 0.09386485602749683,
+  "n_trades": 760,
+  "n_fills": 846,
+  "periods_per_year": 252.0
+}

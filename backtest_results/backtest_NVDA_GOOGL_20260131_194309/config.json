@@ -1,0 +1,35 @@
+{
+  "strategy": {
+    "name": "Orchestrator",
+    "version": "1.0.0",
+    "params": {}
+  },
+  "data": {
+    "symbols": [
+      "NVDA",
+      "GOOGL"
+    ],
+    "start_date": "2024-01-01",
+    "end_date": "2025-01-01",
+    "bar_size": "5 mins",
+    "data_source": "IBKR"
+  },
+  "capital": {
+    "initial": 100000,
+    "position_size_pct": 0.02,
+    "max_positions": 5
+  },
+  "costs": {
+    "commission_per_share": 0.005,
+    "min_commission": 1.0,
+    "slippage_pct": 0.0005
+  },
+  "execution": {
+    "fill_on_close": false,
+    "allow_shorting": true
+  },
+  "risk": {
+    "max_daily_loss_pct": 0.05,
+    "max_drawdown_pct": 0.2
+  }
+}

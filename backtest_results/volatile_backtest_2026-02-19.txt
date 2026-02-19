@@ -1,0 +1,169 @@
+
+==============================================================================
+  HIGH-VOLATILITY BACKTEST SUITE
+==============================================================================
+  Date: 2026-02-19 00:27:33
+  Available symbols: AAPL, GOOGL, IWM, NVDA, QQQ, SMCI, SPY
+
+==============================================================================
+  VOLATILITY PROFILE
+==============================================================================
+  SMCI: 522 bars, $28.55->$29.14, vol=103%, max_day=36%, days>5%=149
+  NVDA: 252 bars, $48.19->$134.29, vol=52%, max_day=16%, days>5%=24
+  SPY: 522 bars, $472.60->$691.84, vol=16%, max_day=9%, days>5%=2
+  QQQ: 522 bars, $402.57->$621.81, vol=21%, max_day=12%, days>5%=3
+  [DROP] NVDA: only 252 bars (need 261)
+
+  Final daily universe: SMCI, SPY, QQQ (522 bars, 2024-01-02 to 2026-01-30)
+  Loading 5-min data for: SMCI, SPY, QQQ
+  5-min bars: 40500 bars
+
+==============================================================================
+  BUY-AND-HOLD BENCHMARKS
+==============================================================================
+
+  Buy & Hold SMCI
+  ──────────────────────────────────────────────────
+  Total Return:                   +2.07%
+  Annualized Return:              +0.99%
+  Sharpe Ratio:                   -0.010
+  Sortino Ratio:                  -0.015
+  Max Drawdown:                  -84.81%
+  Volatility:                   +102.66%
+  Total Trades:                        1
+  Win Rate:                     +100.00%
+
+  Buy & Hold SPY
+  ──────────────────────────────────────────────────
+  Total Return:                  +46.39%
+  Annualized Return:             +20.24%
+  Sharpe Ratio:                   +1.164
+  Sortino Ratio:                  +1.475
+  Max Drawdown:                  -18.98%
+  Volatility:                    +15.67%
+  Total Trades:                        1
+  Win Rate:                     +100.00%
+
+  Buy & Hold QQQ
+  ──────────────────────────────────────────────────
+  Total Return:                  +54.46%
+  Annualized Return:             +23.40%
+  Sharpe Ratio:                   +1.042
+  Sortino Ratio:                  +1.376
+  Max Drawdown:                  -22.86%
+  Volatility:                    +20.55%
+  Total Trades:                        1
+  Win Rate:                     +100.00%
+
+==============================================================================
+  BACKTEST 1: REGIME TRANSITION (HIGH-VOL UNIVERSE)
+==============================================================================
+  Completed in 3.1s
+
+  Regime Transition (SMCI/NVDA/SPY/QQQ)
+  ──────────────────────────────────────────────────
+  Total Return:                   +2.47%
+  Annualized Return:              +1.19%
+  Sharpe Ratio:                   -0.121
+  Sortino Ratio:                  +0.000
+  Max Drawdown:                   -8.13%
+  Volatility:                     +0.00%
+  Total Trades:                      453
+  Win Rate:                       +0.00%
+
+==============================================================================
+  BACKTEST 2: CROSS-ASSET DIVERGENCE (SMCI vs SPY/QQQ)
+==============================================================================
+  Completed in 58.1s
+
+  Cross-Asset Divergence (SMCI/NVDA vs anchors)
+  ──────────────────────────────────────────────────
+  Total Return:                   -3.16%
+  Annualized Return:              -1.54%
+  Sharpe Ratio:                   -0.991
+  Sortino Ratio:                  -0.593
+  Max Drawdown:                   -6.10%
+  Volatility:                     +3.58%
+  Total Trades:                      154
+  Win Rate:                      +52.08%
+
+==============================================================================
+  BACKTEST 3: FLOW PRESSURE (HIGH-VOL)
+==============================================================================
+  Completed in 0.0s
+
+  Flow Pressure (SMCI/NVDA/SPY/QQQ)
+  ──────────────────────────────────────────────────
+  Total Return:                   -0.93%
+  Annualized Return:              -0.45%
+  Sharpe Ratio:                   -2.582
+  Sortino Ratio:                  +0.000
+  Max Drawdown:                   -1.91%
+  Volatility:                     +0.95%
+  Total Trades:                      343
+  Win Rate:                      +23.08%
+
+==============================================================================
+  BACKTEST 4: INTRADAY LIQUIDITY CYCLES (SMCI)
+==============================================================================
+  Completed in 0.2s
+
+  Liquidity Cycles (SMCI 5-min)
+  ──────────────────────────────────────────────────
+  Total Return:                   +0.00%
+  Annualized Return:              +0.00%
+  Sharpe Ratio:                   +0.020
+  Sortino Ratio:                  +0.010
+  Max Drawdown:                   -1.01%
+  Volatility:                     +0.00%
+  Total Trades:                      522
+  Win Rate:                      +69.73%
+
+==============================================================================
+  BACKTEST 5: FULL MULTI-STRATEGY CONTROLLER (HIGH-VOL)
+==============================================================================
+  Registered 7 strategies: Orchestrator, ORB, PureMomentum, RegimeTransition, CrossAssetDivergence, FlowPressure, LiquidityCycles
+  [  5.0%] Processing 121500 bars across 3 symbols                       [  5.0%] Bar 0/121500                                                  [  9.5%] Bar 6076/121500                                               [ 14.0%] Bar 12152/121500                                              [ 18.5%] Bar 18228/121500                                              [ 23.0%] Bar 24304/121500                                              [ 27.5%] Bar 30380/121500                                              [ 32.0%] Bar 36456/121500                                              [ 36.5%] Bar 42532/121500                                              [ 41.0%] Bar 48608/121500                                              [ 45.5%] Bar 54684/121500                                              [ 50.0%] Bar 60760/121500                                              [ 54.5%] Bar 66836/121500                                              [ 59.0%] Bar 72912/121500                                              [ 63.5%] Bar 78988/121500                                              [ 68.0%] Bar 85064/121500                                              [ 72.5%] Bar 91140/121500                                              [ 77.0%] Bar 97216/121500                                              [ 81.5%] Bar 103292/121500                                             [ 86.0%] Bar 109368/121500                                             [ 90.5%] Bar 115444/121500                                             [ 95.0%] Computing metrics...                                        
+  Completed in 706.3s
+
+  Combined Portfolio (SMCI/SPY/QQQ)
+  ──────────────────────────────────────────────────
+  Total Return:                  +14.50%
+  Annualized Return:              +6.77%
+  Sharpe Ratio:                   +0.699
+  Sortino Ratio:                  +0.925
+  Max Drawdown:                   -6.03%
+  Volatility:                     +6.82%
+  Total Trades:                     1009
+  Win Rate:                      +25.00%
+
+  Strategy Signal Attribution:
+  ──────────────────────────────────────────────────
+    FlowPressure                      656 signals
+    PureMomentum                      357 signals
+    Orchestrator                        2 signals
+
+==============================================================================
+  PERFORMANCE SUMMARY — HIGH VOLATILITY
+==============================================================================
+
+  BENCHMARKS                      Return   Ann.Ret   Sharpe     MaxDD      Vol
+  ────────────────────────────────────────────────────────────────────────────
+  BuyHold_SMCI                    +2.07%    +0.99%   -0.010   -84.81% +102.66%
+  BuyHold_SPY                    +46.39%   +20.24%   +1.164   -18.98%  +15.67%
+  BuyHold_QQQ                    +54.46%   +23.40%   +1.042   -22.86%  +20.55%
+
+  STRATEGIES                      Return   Ann.Ret   Sharpe     MaxDD  Trades  WinRate
+  ────────────────────────────────────────────────────────────────────────────────────────
+  RegimeTransition                +2.47%    +1.19%   -0.121    -8.13%     453   +0.00%
+  CrossAssetDiv                   -3.16%    -1.54%   -0.991    -6.10%     154  +52.08%
+  FlowPressure                    -0.93%    -0.45%   -2.582    -1.91%     343  +23.08%
+  LiquidityCycles_SMCI            +0.00%    +0.00%   +0.020    -1.01%     522  +69.73%
+  ────────────────────────────────────────────────────────────────────────────────────────
+  COMBINED PORTFOLIO             +14.50%    +6.77%   +0.699    -6.03%    1009  +25.00%
+
+  Alpha vs SMCI Buy&Hold: +12.43%
+  Alpha vs SPY Buy&Hold:  -31.89%
+
+  Total runtime: 768.2s
+==============================================================================

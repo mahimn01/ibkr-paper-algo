@@ -1,0 +1,2 @@
+id,symbol,direction,entry_time,exit_time,entry_price,exit_price,quantity,net_pnl,pnl_percent,gross_pnl,commission,slippage,duration_minutes,bars_held,max_adverse_excursion,max_favorable_excursion,exit_reason,signal_confidence,market_regime
+T-00001,NVDA,SHORT,2025-01-29T13:00:00,2025-01-29T13:05:00,120.3798,122.0992,16,-28.51,-1.4803,-27.51,1.0,0.98,5,1,28.8,1.12,Stop loss hit,0.58,TREND_DOWN

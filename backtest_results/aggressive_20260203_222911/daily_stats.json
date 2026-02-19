@@ -1,0 +1,4412 @@
+[
+  {
+    "timestamp": "2024-05-01 00:00:00",
+    "equity": 100000.0,
+    "cash": 100000.0,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "UNKNOWN"
+  },
+  {
+    "timestamp": "2024-05-02 00:00:00",
+    "equity": 100000.0,
+    "cash": 100000.0,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-05-03 00:00:00",
+    "equity": 100000.0,
+    "cash": 100000.0,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-05-06 00:00:00",
+    "equity": 100000.0,
+    "cash": 100000.0,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-05-07 00:00:00",
+    "equity": 100000.0,
+    "cash": 100000.0,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-05-08 00:00:00",
+    "equity": 100000.0,
+    "cash": 100000.0,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-05-09 00:00:00",
+    "equity": 100000.0,
+    "cash": 100000.0,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-05-10 00:00:00",
+    "equity": 100000.0,
+    "cash": 100000.0,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-05-13 00:00:00",
+    "equity": 100000.0,
+    "cash": 100000.0,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-05-14 00:00:00",
+    "equity": 100000.0,
+    "cash": 100000.0,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-05-15 00:00:00",
+    "equity": 100000.0,
+    "cash": 100000.0,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-05-16 00:00:00",
+    "equity": 99994.42093623208,
+    "cash": 96276.28446977364,
+    "gross_exposure": 0.037183439152365806,
+    "net_exposure": 0.037183439152365806,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-05-17 00:00:00",
+    "equity": 100034.5523896535,
+    "cash": 96276.28446977364,
+    "gross_exposure": 0.03756969797036416,
+    "net_exposure": 0.03756969797036416,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-05-20 00:00:00",
+    "equity": 100052.91039494201,
+    "cash": 96276.28446977364,
+    "gross_exposure": 0.03774628754186937,
+    "net_exposure": 0.03774628754186937,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-05-21 00:00:00",
+    "equity": 100072.76265647495,
+    "cash": 96276.28446977364,
+    "gross_exposure": 0.03793717776867694,
+    "net_exposure": 0.03793717776867694,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-05-22 00:00:00",
+    "equity": 100038.42865366231,
+    "cash": 94304.23842527524,
+    "gross_exposure": 0.05731987502761667,
+    "net_exposure": 0.05731987502761667,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-05-23 00:00:00",
+    "equity": 99939.69647204835,
+    "cash": 90874.12094553241,
+    "gross_exposure": 0.0907104568708736,
+    "net_exposure": 0.0907104568708736,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-05-24 00:00:00",
+    "equity": 100070.00021708831,
+    "cash": 100070.00021708831,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-05-28 00:00:00",
+    "equity": 100070.00021708831,
+    "cash": 100070.00021708831,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-05-29 00:00:00",
+    "equity": 100070.00021708831,
+    "cash": 100070.00021708831,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-05-30 00:00:00",
+    "equity": 100070.00021708831,
+    "cash": 100070.00021708831,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-05-31 00:00:00",
+    "equity": 100070.00021708831,
+    "cash": 100070.00021708831,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-06-03 00:00:00",
+    "equity": 100070.00021708831,
+    "cash": 100070.00021708831,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-06-04 00:00:00",
+    "equity": 100070.00021708831,
+    "cash": 100070.00021708831,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-06-05 00:00:00",
+    "equity": 100070.00021708831,
+    "cash": 100070.00021708831,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-06-06 00:00:00",
+    "equity": 100070.00021708831,
+    "cash": 100070.00021708831,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-06-07 00:00:00",
+    "equity": 100070.00021708831,
+    "cash": 100070.00021708831,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-06-10 00:00:00",
+    "equity": 100070.00021708831,
+    "cash": 100070.00021708831,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-06-11 00:00:00",
+    "equity": 100060.6422487619,
+    "cash": 99929.19306407694,
+    "gross_exposure": 0.06234820799006462,
+    "net_exposure": 0.0013136951925429477,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-06-12 00:00:00",
+    "equity": 100125.38576560302,
+    "cash": 100125.38576560302,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-06-13 00:00:00",
+    "equity": 100125.38576560302,
+    "cash": 100125.38576560302,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-06-14 00:00:00",
+    "equity": 100125.38576560302,
+    "cash": 100125.38576560302,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-06-17 00:00:00",
+    "equity": 100125.38576560302,
+    "cash": 100125.38576560302,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-06-18 00:00:00",
+    "equity": 100125.38576560302,
+    "cash": 100125.38576560302,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-06-20 00:00:00",
+    "equity": 100111.1582251794,
+    "cash": 101821.45039226017,
+    "gross_exposure": 0.09475064732674741,
+    "net_exposure": -0.01708393147578829,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-06-21 00:00:00",
+    "equity": 100063.22202063148,
+    "cash": 101821.45039226017,
+    "gross_exposure": 0.09277369443376819,
+    "net_exposure": -0.017571174864488864,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-06-24 00:00:00",
+    "equity": 99743.04956161958,
+    "cash": 93755.17174095745,
+    "gross_exposure": 0.060033033348984695,
+    "net_exposure": 0.060033033348984695,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-06-25 00:00:00",
+    "equity": 99883.35200439191,
+    "cash": 93755.17174095745,
+    "gross_exposure": 0.061353370110816936,
+    "net_exposure": 0.061353370110816936,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-06-26 00:00:00",
+    "equity": 99913.5968423548,
+    "cash": 93755.17174095745,
+    "gross_exposure": 0.0616375077669781,
+    "net_exposure": 0.0616375077669781,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-06-27 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-06-28 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-07-01 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-07-02 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-07-03 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-07-05 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-07-08 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-07-09 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-07-10 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-07-11 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-07-12 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-07-15 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-07-16 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-07-17 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-07-18 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-07-19 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-07-22 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-07-23 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-07-24 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-07-25 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-07-26 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-07-29 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-07-30 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-07-31 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-08-01 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-08-02 00:00:00",
+    "equity": 99981.53874769888,
+    "cash": 99981.53874769888,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-08-05 00:00:00",
+    "equity": 99975.08171693169,
+    "cash": 104281.2042692411,
+    "gross_exposure": 0.043071958315590284,
+    "net_exposure": -0.043071958315590284,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-08-06 00:00:00",
+    "equity": 99950.74578647211,
+    "cash": 104281.2042692411,
+    "gross_exposure": 0.04332592467114039,
+    "net_exposure": -0.04332592467114039,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-08-07 00:00:00",
+    "equity": 99928.28185066328,
+    "cash": 104281.2042692411,
+    "gross_exposure": 0.04356046494507945,
+    "net_exposure": -0.04356046494507945,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-08-08 00:00:00",
+    "equity": 99847.25122506708,
+    "cash": 104281.2042692411,
+    "gross_exposure": 0.044407362143394254,
+    "net_exposure": -0.044407362143394254,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-08-09 00:00:00",
+    "equity": 99816.7644550408,
+    "cash": 104281.2042692411,
+    "gross_exposure": 0.04472635271814653,
+    "net_exposure": -0.04472635271814653,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-08-12 00:00:00",
+    "equity": 99813.81517025702,
+    "cash": 99813.81517025702,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-08-13 00:00:00",
+    "equity": 99813.81517025702,
+    "cash": 99813.81517025702,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-08-14 00:00:00",
+    "equity": 99813.81517025702,
+    "cash": 99813.81517025702,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-08-15 00:00:00",
+    "equity": 99813.81517025702,
+    "cash": 99813.81517025702,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-08-16 00:00:00",
+    "equity": 99813.81517025702,
+    "cash": 99813.81517025702,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-08-19 00:00:00",
+    "equity": 99813.81517025702,
+    "cash": 99813.81517025702,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-08-20 00:00:00",
+    "equity": 99813.81517025702,
+    "cash": 99813.81517025702,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-08-21 00:00:00",
+    "equity": 99813.81517025702,
+    "cash": 99813.81517025702,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-08-22 00:00:00",
+    "equity": 99813.81517025702,
+    "cash": 99813.81517025702,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-08-23 00:00:00",
+    "equity": 99813.81517025702,
+    "cash": 99813.81517025702,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-08-26 00:00:00",
+    "equity": 99813.81517025702,
+    "cash": 99813.81517025702,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-08-27 00:00:00",
+    "equity": 99813.81517025702,
+    "cash": 99813.81517025702,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-08-28 00:00:00",
+    "equity": 99813.81517025702,
+    "cash": 99813.81517025702,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-08-29 00:00:00",
+    "equity": 99813.81517025702,
+    "cash": 99813.81517025702,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-08-30 00:00:00",
+    "equity": 99813.81517025702,
+    "cash": 99813.81517025702,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-09-03 00:00:00",
+    "equity": 99799.81381829549,
+    "cash": 97489.25242252155,
+    "gross_exposure": 0.09352186238421158,
+    "net_exposure": 0.02315196098442387,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-09-04 00:00:00",
+    "equity": 99866.98270503544,
+    "cash": 98940.28685439465,
+    "gross_exposure": 0.09224172082572736,
+    "net_exposure": 0.009279301582364265,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-09-05 00:00:00",
+    "equity": 99856.91082043995,
+    "cash": 106798.5342697988,
+    "gross_exposure": 0.17186279632966808,
+    "net_exposure": -0.06951570394402724,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-09-06 00:00:00",
+    "equity": 100183.79105250111,
+    "cash": 107772.59223658059,
+    "gross_exposure": 0.17448756185492964,
+    "net_exposure": -0.07574879233809975,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-09-09 00:00:00",
+    "equity": 99783.54142113845,
+    "cash": 106953.47504519865,
+    "gross_exposure": 0.1718853958303684,
+    "net_exposure": -0.07185487227597331,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-09-10 00:00:00",
+    "equity": 99571.3585453209,
+    "cash": 99571.3585453209,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-09-11 00:00:00",
+    "equity": 99571.3585453209,
+    "cash": 99571.3585453209,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-09-12 00:00:00",
+    "equity": 99571.3585453209,
+    "cash": 99571.3585453209,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-09-13 00:00:00",
+    "equity": 99571.3585453209,
+    "cash": 99571.3585453209,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-09-16 00:00:00",
+    "equity": 99571.3585453209,
+    "cash": 99571.3585453209,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-09-17 00:00:00",
+    "equity": 99566.65344695386,
+    "cash": 102704.4316177019,
+    "gross_exposure": 0.03151434804846343,
+    "net_exposure": -0.03151434804846343,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-09-18 00:00:00",
+    "equity": 99592.8809942593,
+    "cash": 106078.69757876995,
+    "gross_exposure": 0.06512329515685453,
+    "net_exposure": -0.06512329515685453,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-09-19 00:00:00",
+    "equity": 99486.20879288453,
+    "cash": 99486.20879288453,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-09-20 00:00:00",
+    "equity": 99486.20879288453,
+    "cash": 99486.20879288453,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-09-23 00:00:00",
+    "equity": 99486.20879288453,
+    "cash": 99486.20879288453,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-09-24 00:00:00",
+    "equity": 99486.20879288453,
+    "cash": 99486.20879288453,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-09-25 00:00:00",
+    "equity": 99475.30894335608,
+    "cash": 98866.43518749377,
+    "gross_exposure": 0.07304690451908498,
+    "net_exposure": 0.0061208531275737405,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-09-26 00:00:00",
+    "equity": 99495.7390763159,
+    "cash": 98866.43518749377,
+    "gross_exposure": 0.07276110918704536,
+    "net_exposure": 0.0063249330540621,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-09-27 00:00:00",
+    "equity": 99547.56678809309,
+    "cash": 98866.43518749377,
+    "gross_exposure": 0.07213577744517141,
+    "net_exposure": 0.006842272720228756,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-09-30 00:00:00",
+    "equity": 99611.11906540793,
+    "cash": 98866.43518749377,
+    "gross_exposure": 0.07215844930114473,
+    "net_exposure": 0.007475911172378029,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-10-01 00:00:00",
+    "equity": 99659.7888908314,
+    "cash": 98866.43518749377,
+    "gross_exposure": 0.07219520553894736,
+    "net_exposure": 0.007960619946793963,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-10-02 00:00:00",
+    "equity": 99630.08274065677,
+    "cash": 99630.08274065677,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-10-03 00:00:00",
+    "equity": 99630.08274065677,
+    "cash": 99630.08274065677,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-10-04 00:00:00",
+    "equity": 99630.08274065677,
+    "cash": 99630.08274065677,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-10-07 00:00:00",
+    "equity": 99630.08274065677,
+    "cash": 99630.08274065677,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-10-08 00:00:00",
+    "equity": 99630.08274065677,
+    "cash": 99630.08274065677,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-10-09 00:00:00",
+    "equity": 99630.08274065677,
+    "cash": 99630.08274065677,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-10-10 00:00:00",
+    "equity": 99630.08274065677,
+    "cash": 99630.08274065677,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-10-11 00:00:00",
+    "equity": 99630.08274065677,
+    "cash": 99630.08274065677,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-10-14 00:00:00",
+    "equity": 99630.08274065677,
+    "cash": 99630.08274065677,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-10-15 00:00:00",
+    "equity": 99630.08274065677,
+    "cash": 99630.08274065677,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-10-16 00:00:00",
+    "equity": 99630.08274065677,
+    "cash": 99630.08274065677,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-10-17 00:00:00",
+    "equity": 99625.27586211769,
+    "cash": 96421.75800868505,
+    "gross_exposure": 0.032155673605023104,
+    "net_exposure": 0.032155673605023104,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-10-18 00:00:00",
+    "equity": 99625.94872871156,
+    "cash": 96421.75800868505,
+    "gross_exposure": 0.032162210356979914,
+    "net_exposure": 0.032162210356979914,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-10-21 00:00:00",
+    "equity": 99595.61345477107,
+    "cash": 99595.61345477107,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-10-22 00:00:00",
+    "equity": 99595.61345477107,
+    "cash": 99595.61345477107,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-10-23 00:00:00",
+    "equity": 99595.61345477107,
+    "cash": 99595.61345477107,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-10-24 00:00:00",
+    "equity": 99595.61345477107,
+    "cash": 99595.61345477107,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-10-25 00:00:00",
+    "equity": 99595.61345477107,
+    "cash": 99595.61345477107,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-10-28 00:00:00",
+    "equity": 99595.61345477107,
+    "cash": 99595.61345477107,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-10-29 00:00:00",
+    "equity": 99595.61345477107,
+    "cash": 99595.61345477107,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-10-30 00:00:00",
+    "equity": 99595.61345477107,
+    "cash": 99595.61345477107,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-10-31 00:00:00",
+    "equity": 99595.61345477107,
+    "cash": 99595.61345477107,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-11-01 00:00:00",
+    "equity": 99595.61345477107,
+    "cash": 99595.61345477107,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-11-04 00:00:00",
+    "equity": 99580.54056753595,
+    "cash": 89535.29749181437,
+    "gross_exposure": 0.10087556282051759,
+    "net_exposure": 0.10087556282051759,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-11-05 00:00:00",
+    "equity": 99865.54342142999,
+    "cash": 89535.29749181437,
+    "gross_exposure": 0.1034415432560383,
+    "net_exposure": 0.1034415432560383,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-11-06 00:00:00",
+    "equity": 100261.28796139517,
+    "cash": 94267.74276488012,
+    "gross_exposure": 0.05977925596589998,
+    "net_exposure": 0.05977925596589998,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-11-07 00:00:00",
+    "equity": 100346.95551551021,
+    "cash": 94267.74276488012,
+    "gross_exposure": 0.060581935140926656,
+    "net_exposure": 0.060581935140926656,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-11-08 00:00:00",
+    "equity": 100292.8344593632,
+    "cash": 94267.74276488012,
+    "gross_exposure": 0.06007499665316911,
+    "net_exposure": 0.06007499665316911,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-11-11 00:00:00",
+    "equity": 100245.07605459448,
+    "cash": 100245.07605459448,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-11-12 00:00:00",
+    "equity": 100245.07605459448,
+    "cash": 100245.07605459448,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-11-13 00:00:00",
+    "equity": 100245.07605459448,
+    "cash": 100245.07605459448,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-11-14 00:00:00",
+    "equity": 100245.07605459448,
+    "cash": 100245.07605459448,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-11-15 00:00:00",
+    "equity": 100245.07605459448,
+    "cash": 100245.07605459448,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-11-18 00:00:00",
+    "equity": 100245.07605459448,
+    "cash": 100245.07605459448,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-11-19 00:00:00",
+    "equity": 100245.07605459448,
+    "cash": 100245.07605459448,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-11-20 00:00:00",
+    "equity": 100245.07605459448,
+    "cash": 100245.07605459448,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-11-21 00:00:00",
+    "equity": 100245.07605459448,
+    "cash": 100245.07605459448,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-11-22 00:00:00",
+    "equity": 100245.07605459448,
+    "cash": 100245.07605459448,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-11-25 00:00:00",
+    "equity": 100245.07605459448,
+    "cash": 100245.07605459448,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-11-26 00:00:00",
+    "equity": 100245.07605459448,
+    "cash": 100245.07605459448,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-11-27 00:00:00",
+    "equity": 100232.65560961253,
+    "cash": 91955.11813413496,
+    "gross_exposure": 0.0825832402138184,
+    "net_exposure": 0.0825832402138184,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-11-29 00:00:00",
+    "equity": 100410.63428593615,
+    "cash": 91955.11813413496,
+    "gross_exposure": 0.08420936897702179,
+    "net_exposure": 0.08420936897702179,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-12-02 00:00:00",
+    "equity": 100433.87548765539,
+    "cash": 91955.11813413496,
+    "gross_exposure": 0.08442129025044519,
+    "net_exposure": 0.08442129025044519,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-12-03 00:00:00",
+    "equity": 100533.56801081948,
+    "cash": 91955.11813413496,
+    "gross_exposure": 0.08532920940159314,
+    "net_exposure": 0.08532920940159314,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-12-04 00:00:00",
+    "equity": 100831.08315359759,
+    "cash": 92588.25610932958,
+    "gross_exposure": 0.08174886936116298,
+    "net_exposure": 0.08174886936116298,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-12-05 00:00:00",
+    "equity": 100826.53977366413,
+    "cash": 92588.25610932958,
+    "gross_exposure": 0.08170749172616548,
+    "net_exposure": 0.08170749172616548,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2024-12-06 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-12-09 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-12-10 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-12-11 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-12-12 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-12-13 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-12-16 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-12-17 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-12-18 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-12-19 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-12-20 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-12-23 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-12-24 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2024-12-26 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-12-27 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-12-30 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2024-12-31 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-01-02 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-01-03 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-01-06 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-01-07 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-01-08 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-01-10 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-01-13 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-01-14 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-01-15 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-01-16 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-01-17 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-01-21 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-01-22 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-01-23 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-01-24 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-01-27 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-01-28 00:00:00",
+    "equity": 100665.61389363025,
+    "cash": 100665.61389363025,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-01-29 00:00:00",
+    "equity": 100659.5635264673,
+    "cash": 96627.32949585246,
+    "gross_exposure": 0.04005813148151208,
+    "net_exposure": 0.04005813148151208,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-01-30 00:00:00",
+    "equity": 100718.85162867911,
+    "cash": 94386.7237067773,
+    "gross_exposure": 0.06286934193061007,
+    "net_exposure": 0.06286934193061007,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-01-31 00:00:00",
+    "equity": 100738.94484391891,
+    "cash": 94386.7237067773,
+    "gross_exposure": 0.06305626038652186,
+    "net_exposure": 0.06305626038652186,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-02-03 00:00:00",
+    "equity": 100815.26219354532,
+    "cash": 94386.7237067773,
+    "gross_exposure": 0.06376552862032447,
+    "net_exposure": 0.06376552862032447,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-02-04 00:00:00",
+    "equity": 100864.48259871379,
+    "cash": 91984.41570943024,
+    "gross_exposure": 0.149012766538732,
+    "net_exposure": 0.08803958202623836,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-02-05 00:00:00",
+    "equity": 100289.89961689893,
+    "cash": 100289.89961689893,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-02-06 00:00:00",
+    "equity": 100289.89961689893,
+    "cash": 100289.89961689893,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-02-07 00:00:00",
+    "equity": 100216.58113083313,
+    "cash": 51353.877988051514,
+    "gross_exposure": 0.48757104454592387,
+    "net_exposure": 0.48757104454592387,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-02-10 00:00:00",
+    "equity": 100441.66233734449,
+    "cash": 51353.877988051514,
+    "gross_exposure": 0.4887193541702467,
+    "net_exposure": 0.4887193541702467,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-02-11 00:00:00",
+    "equity": 100591.48736347101,
+    "cash": 51353.877988051514,
+    "gross_exposure": 0.4894808762247185,
+    "net_exposure": 0.4894808762247185,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-02-12 00:00:00",
+    "equity": 100600.97657360334,
+    "cash": 54297.91533418426,
+    "gross_exposure": 0.4602645303899419,
+    "net_exposure": 0.4602645303899419,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-02-13 00:00:00",
+    "equity": 101058.79726962779,
+    "cash": 54297.91533418426,
+    "gross_exposure": 0.4627096620859651,
+    "net_exposure": 0.4627096620859651,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-02-14 00:00:00",
+    "equity": 101250.74098974667,
+    "cash": 52192.41283407082,
+    "gross_exposure": 0.4845231518912422,
+    "net_exposure": 0.4845231518912422,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-02-18 00:00:00",
+    "equity": 101070.19516854944,
+    "cash": 52955.427956879554,
+    "gross_exposure": 0.47605297616603426,
+    "net_exposure": 0.47605297616603426,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-02-19 00:00:00",
+    "equity": 100970.42271338898,
+    "cash": 52955.427956879554,
+    "gross_exposure": 0.475535245532279,
+    "net_exposure": 0.475535245532279,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-02-20 00:00:00",
+    "equity": 100575.08720985652,
+    "cash": 53122.417070425814,
+    "gross_exposure": 0.4718133630887895,
+    "net_exposure": 0.4718133630887895,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-02-21 00:00:00",
+    "equity": 99842.26806271833,
+    "cash": 51574.94584497546,
+    "gross_exposure": 0.48343575475892203,
+    "net_exposure": 0.48343575475892203,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-02-24 00:00:00",
+    "equity": 99579.47867602391,
+    "cash": 51025.93205944053,
+    "gross_exposure": 0.4875858687164807,
+    "net_exposure": 0.4875858687164807,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-02-25 00:00:00",
+    "equity": 99324.86367676334,
+    "cash": 50485.01765717185,
+    "gross_exposure": 0.4917182285649327,
+    "net_exposure": 0.4917182285649327,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-02-26 00:00:00",
+    "equity": 99194.73704382393,
+    "cash": 50152.96143307546,
+    "gross_exposure": 0.4943989678513081,
+    "net_exposure": 0.4943989678513081,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-02-27 00:00:00",
+    "equity": 98485.22348716536,
+    "cash": 47832.810823511056,
+    "gross_exposure": 0.514314847143088,
+    "net_exposure": 0.514314847143088,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-02-28 00:00:00",
+    "equity": 99376.0987458656,
+    "cash": 49843.03291216963,
+    "gross_exposure": 0.4984404344586602,
+    "net_exposure": 0.4984404344586602,
+    "n_positions": 6,
+    "risk_action": "SCALE_DOWN",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-03-03 00:00:00",
+    "equity": 98499.800503548,
+    "cash": 50228.72020425445,
+    "gross_exposure": 0.4900627214727689,
+    "net_exposure": 0.4900627214727689,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-03-04 00:00:00",
+    "equity": 97428.4721499153,
+    "cash": 51447.807075498036,
+    "gross_exposure": 0.5401006277997352,
+    "net_exposure": 0.4719427910525562,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-03-05 00:00:00",
+    "equity": 97868.64637713331,
+    "cash": 46820.95832203828,
+    "gross_exposure": 0.5215938908400204,
+    "net_exposure": 0.5215938908400204,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-03-06 00:00:00",
+    "equity": 96796.5741552484,
+    "cash": 49250.513407859464,
+    "gross_exposure": 0.49119569739246743,
+    "net_exposure": 0.49119569739246743,
+    "n_positions": 4,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-03-07 00:00:00",
+    "equity": 96831.95993494507,
+    "cash": 49250.513407859464,
+    "gross_exposure": 0.4913816322529505,
+    "net_exposure": 0.4913816322529505,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-03-10 00:00:00",
+    "equity": 95391.90103397533,
+    "cash": 63447.56630162075,
+    "gross_exposure": 0.42190066163026263,
+    "net_exposure": 0.33487470514899487,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-03-11 00:00:00",
+    "equity": 94989.00487835272,
+    "cash": 73573.72996012244,
+    "gross_exposure": 0.31291178518712826,
+    "net_exposure": 0.2254500396720195,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-03-12 00:00:00",
+    "equity": 95016.68025649645,
+    "cash": 69831.88963785468,
+    "gross_exposure": 0.32977746485329584,
+    "net_exposure": 0.26505652008316555,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-03-13 00:00:00",
+    "equity": 94815.40137833467,
+    "cash": 69034.76328251134,
+    "gross_exposure": 0.27190348530986885,
+    "net_exposure": 0.27190348530986885,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-03-14 00:00:00",
+    "equity": 95392.42604219796,
+    "cash": 67204.76633571665,
+    "gross_exposure": 0.2954915906427641,
+    "net_exposure": 0.2954915906427641,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-03-17 00:00:00",
+    "equity": 95685.59175459163,
+    "cash": 66546.11319462016,
+    "gross_exposure": 0.30453360872456703,
+    "net_exposure": 0.30453360872456703,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-03-18 00:00:00",
+    "equity": 95548.59660188314,
+    "cash": 70909.60388969877,
+    "gross_exposure": 0.3300147138025813,
+    "net_exposure": 0.25786870334523326,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-03-19 00:00:00",
+    "equity": 95807.22189178203,
+    "cash": 63588.51455804854,
+    "gross_exposure": 0.3362868340982246,
+    "net_exposure": 0.3362868340982246,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-03-20 00:00:00",
+    "equity": 95795.17415289076,
+    "cash": 65272.07318752525,
+    "gross_exposure": 0.31862879560770047,
+    "net_exposure": 0.31862879560770047,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-03-21 00:00:00",
+    "equity": 95694.01718974923,
+    "cash": 65970.37738643966,
+    "gross_exposure": 0.3106112657426777,
+    "net_exposure": 0.3106112657426777,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-03-24 00:00:00",
+    "equity": 96134.6563002661,
+    "cash": 67315.2292670966,
+    "gross_exposure": 0.3868561410391669,
+    "net_exposure": 0.299781869954943,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-03-25 00:00:00",
+    "equity": 96295.01090209925,
+    "cash": 67828.15769937032,
+    "gross_exposure": 0.38301052906309335,
+    "net_exposure": 0.29562126776921466,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-03-26 00:00:00",
+    "equity": 96067.35680820113,
+    "cash": 68304.86163395857,
+    "gross_exposure": 0.3959826077847315,
+    "net_exposure": 0.2889898930983445,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-03-27 00:00:00",
+    "equity": 95918.83995509712,
+    "cash": 66047.54969019121,
+    "gross_exposure": 0.418748553024028,
+    "net_exposure": 0.31142255555727827,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-03-28 00:00:00",
+    "equity": 95328.59925626808,
+    "cash": 76016.75395932354,
+    "gross_exposure": 0.34914560595413136,
+    "net_exposure": 0.20258186365488565,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-03-31 00:00:00",
+    "equity": 95640.28336914512,
+    "cash": 77243.70932257363,
+    "gross_exposure": 0.3485779629217952,
+    "net_exposure": 0.19235173086601795,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-04-01 00:00:00",
+    "equity": 95551.51574892997,
+    "cash": 74390.3993721441,
+    "gross_exposure": 0.3210333754646773,
+    "net_exposure": 0.22146290627548573,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-04-02 00:00:00",
+    "equity": 95710.95329002223,
+    "cash": 72854.51577727952,
+    "gross_exposure": 0.33819851304104936,
+    "net_exposure": 0.23880691527001496,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-04-03 00:00:00",
+    "equity": 94276.84597545027,
+    "cash": 90578.73593286394,
+    "gross_exposure": 0.3496534379361128,
+    "net_exposure": 0.03922606875869945,
+    "n_positions": 5,
+    "risk_action": "HALT_ENTRIES",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-04-04 00:00:00",
+    "equity": 94004.05254767291,
+    "cash": 103329.26167639716,
+    "gross_exposure": 0.30527897343274923,
+    "net_exposure": -0.09920007569881205,
+    "n_positions": 5,
+    "risk_action": "HALT_ENTRIES",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-04-07 00:00:00",
+    "equity": 94039.34935451591,
+    "cash": 105094.8930473672,
+    "gross_exposure": 0.3230518282741388,
+    "net_exposure": -0.11756295389894009,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-04-08 00:00:00",
+    "equity": 94306.97926621033,
+    "cash": 101820.18974172125,
+    "gross_exposure": 0.2837832583531672,
+    "net_exposure": -0.07966759760486639,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-04-09 00:00:00",
+    "equity": 93376.58530094982,
+    "cash": 104293.66789394207,
+    "gross_exposure": 0.3386003173160241,
+    "net_exposure": -0.116914562229994,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-04-10 00:00:00",
+    "equity": 94160.9837086795,
+    "cash": 103019.61252374107,
+    "gross_exposure": 0.3077745013367193,
+    "net_exposure": -0.09407961202347775,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-04-11 00:00:00",
+    "equity": 93913.14182495102,
+    "cash": 102191.98817176887,
+    "gross_exposure": 0.3059600000314607,
+    "net_exposure": -0.08815429008060632,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-04-14 00:00:00",
+    "equity": 93926.52852484299,
+    "cash": 108875.79705052068,
+    "gross_exposure": 0.15915917217917505,
+    "net_exposure": -0.15915917217917505,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-04-15 00:00:00",
+    "equity": 93969.8512075496,
+    "cash": 108875.79705052068,
+    "gross_exposure": 0.15862476795933816,
+    "net_exposure": -0.15862476795933816,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-04-16 00:00:00",
+    "equity": 94134.39717952414,
+    "cash": 107656.76215441263,
+    "gross_exposure": 0.1436495625408842,
+    "net_exposure": -0.1436495625408842,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-04-17 00:00:00",
+    "equity": 94026.35675632858,
+    "cash": 106969.86938660845,
+    "gross_exposure": 0.1376583447109759,
+    "net_exposure": -0.1376583447109759,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-04-21 00:00:00",
+    "equity": 94341.01644558639,
+    "cash": 108338.31649294842,
+    "gross_exposure": 0.14836918844769217,
+    "net_exposure": -0.14836918844769217,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-04-22 00:00:00",
+    "equity": 93996.60493878074,
+    "cash": 111467.67995623309,
+    "gross_exposure": 0.18586921334904713,
+    "net_exposure": -0.18586921334904713,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-04-23 00:00:00",
+    "equity": 93802.76170276746,
+    "cash": 114112.89159146746,
+    "gross_exposure": 0.21651953012915176,
+    "net_exposure": -0.21651953012915176,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-04-24 00:00:00",
+    "equity": 93330.93924917917,
+    "cash": 112782.24508428236,
+    "gross_exposure": 0.2084121941939448,
+    "net_exposure": -0.2084121941939448,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-04-25 00:00:00",
+    "equity": 93248.66343762274,
+    "cash": 112782.24508428236,
+    "gross_exposure": 0.209478408875279,
+    "net_exposure": -0.209478408875279,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-04-28 00:00:00",
+    "equity": 93188.14142214615,
+    "cash": 113093.1010841214,
+    "gross_exposure": 0.2135997065528431,
+    "net_exposure": -0.2135997065528431,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-04-29 00:00:00",
+    "equity": 93128.72939951063,
+    "cash": 114082.70250621192,
+    "gross_exposure": 0.2250000965524974,
+    "net_exposure": -0.2250000965524974,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-04-30 00:00:00",
+    "equity": 93388.46093997275,
+    "cash": 117796.0214611134,
+    "gross_exposure": 0.26135520679400737,
+    "net_exposure": -0.26135520679400737,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-05-01 00:00:00",
+    "equity": 92792.95636087494,
+    "cash": 103338.1960006924,
+    "gross_exposure": 0.2708170156068225,
+    "net_exposure": -0.11364267346765708,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-05-02 00:00:00",
+    "equity": 92677.08077148985,
+    "cash": 93675.5334112511,
+    "gross_exposure": 0.24760966287036015,
+    "net_exposure": -0.010773458027050839,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-05-05 00:00:00",
+    "equity": 92850.71954626693,
+    "cash": 97459.15952927298,
+    "gross_exposure": 0.2680522058594197,
+    "net_exposure": -0.04963278696736094,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-05-06 00:00:00",
+    "equity": 92823.12680842847,
+    "cash": 95675.89773908729,
+    "gross_exposure": 0.14586792419652939,
+    "net_exposure": -0.030733406950904176,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-05-07 00:00:00",
+    "equity": 92801.81835279972,
+    "cash": 96337.94087941137,
+    "gross_exposure": 0.1389862879743057,
+    "net_exposure": -0.03810402198336847,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-05-08 00:00:00",
+    "equity": 92774.38273312314,
+    "cash": 96337.94087941137,
+    "gross_exposure": 0.1404455235284354,
+    "net_exposure": -0.038411014347993364,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-05-09 00:00:00",
+    "equity": 92751.38459053113,
+    "cash": 96337.94087941137,
+    "gross_exposure": 0.140858739167582,
+    "net_exposure": -0.03866849324906342,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-05-12 00:00:00",
+    "equity": 92607.46059295972,
+    "cash": 91275.74224389634,
+    "gross_exposure": 0.12126587259461111,
+    "net_exposure": 0.014380249069961167,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-05-13 00:00:00",
+    "equity": 92554.10325905275,
+    "cash": 98827.04571934843,
+    "gross_exposure": 0.25852386584347836,
+    "net_exposure": -0.06777595200439829,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-05-14 00:00:00",
+    "equity": 92501.22392406854,
+    "cash": 97840.70305536772,
+    "gross_exposure": 0.22215009349205278,
+    "net_exposure": -0.05772333494400234,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-05-15 00:00:00",
+    "equity": 92436.02856177917,
+    "cash": 97135.30052442246,
+    "gross_exposure": 0.24265794027738585,
+    "net_exposure": -0.05083809890753323,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-05-16 00:00:00",
+    "equity": 92351.96730794974,
+    "cash": 76889.14659957534,
+    "gross_exposure": 0.3485616723782716,
+    "net_exposure": 0.16743358218686646,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-05-19 00:00:00",
+    "equity": 92447.99917469703,
+    "cash": 74780.06070605098,
+    "gross_exposure": 0.37124739274488466,
+    "net_exposure": 0.19111217794188623,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-05-20 00:00:00",
+    "equity": 92336.29168836887,
+    "cash": 87416.60535926523,
+    "gross_exposure": 0.16229265981648347,
+    "net_exposure": 0.05328009430687751,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-05-21 00:00:00",
+    "equity": 92185.50836961104,
+    "cash": 92580.97762184235,
+    "gross_exposure": 0.17966449306060628,
+    "net_exposure": -0.004289928636567335,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-05-22 00:00:00",
+    "equity": 92244.88626475575,
+    "cash": 93084.64733390094,
+    "gross_exposure": 0.17449479912079097,
+    "net_exposure": -0.009103605664762295,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-05-23 00:00:00",
+    "equity": 92168.23320996991,
+    "cash": 90838.35897044669,
+    "gross_exposure": 0.12110900582742655,
+    "net_exposure": 0.014428770013347376,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-05-27 00:00:00",
+    "equity": 92210.3003247241,
+    "cash": 89391.66129144111,
+    "gross_exposure": 0.1394160008428666,
+    "net_exposure": 0.030567507353917937,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-05-28 00:00:00",
+    "equity": 92173.94793476617,
+    "cash": 84426.71481834074,
+    "gross_exposure": 0.08405013878659442,
+    "net_exposure": 0.08405013878659442,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-05-29 00:00:00",
+    "equity": 92179.19351594152,
+    "cash": 71838.64280349776,
+    "gross_exposure": 0.22066314464908018,
+    "net_exposure": 0.22066314464908018,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-05-30 00:00:00",
+    "equity": 92184.6434456754,
+    "cash": 70006.54142937438,
+    "gross_exposure": 0.3043271183796904,
+    "net_exposure": 0.2405834766760325,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-06-02 00:00:00",
+    "equity": 92195.58883487662,
+    "cash": 75737.98347572966,
+    "gross_exposure": 0.17850751393998598,
+    "net_exposure": 0.17850751393998598,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-06-03 00:00:00",
+    "equity": 92232.91102086172,
+    "cash": 69637.36917243339,
+    "gross_exposure": 0.24498350532726385,
+    "net_exposure": 0.24498350532726385,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-06-04 00:00:00",
+    "equity": 92174.13459682859,
+    "cash": 69637.36917243339,
+    "gross_exposure": 0.2445020560591259,
+    "net_exposure": 0.2445020560591259,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-06-05 00:00:00",
+    "equity": 92106.03249648045,
+    "cash": 82274.866177211,
+    "gross_exposure": 0.10673748562174905,
+    "net_exposure": 0.10673748562174905,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-06-06 00:00:00",
+    "equity": 92223.86016048185,
+    "cash": 79301.16563450017,
+    "gross_exposure": 0.1401231145984832,
+    "net_exposure": 0.1401231145984832,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-06-09 00:00:00",
+    "equity": 92165.79314011782,
+    "cash": 83559.63846527826,
+    "gross_exposure": 0.09337688508529186,
+    "net_exposure": 0.09337688508529186,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-06-10 00:00:00",
+    "equity": 92170.69287616559,
+    "cash": 80072.13953473899,
+    "gross_exposure": 0.13126247578155245,
+    "net_exposure": 0.13126247578155245,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-06-11 00:00:00",
+    "equity": 92145.8393606743,
+    "cash": 83977.74984195236,
+    "gross_exposure": 0.08864306381485845,
+    "net_exposure": 0.08864306381485845,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-06-12 00:00:00",
+    "equity": 92122.02306775127,
+    "cash": 68081.69567963325,
+    "gross_exposure": 0.26096178294345024,
+    "net_exposure": 0.26096178294345024,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-06-13 00:00:00",
+    "equity": 91746.85476406664,
+    "cash": 68081.69567963325,
+    "gross_exposure": 0.25793973150676364,
+    "net_exposure": 0.25793973150676364,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-06-16 00:00:00",
+    "equity": 92005.85401518678,
+    "cash": 68081.69567963325,
+    "gross_exposure": 0.2600286535202916,
+    "net_exposure": 0.2600286535202916,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-06-17 00:00:00",
+    "equity": 91849.94593691544,
+    "cash": 73127.66476848949,
+    "gross_exposure": 0.2038355164768941,
+    "net_exposure": 0.2038355164768941,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-06-18 00:00:00",
+    "equity": 91859.0038915949,
+    "cash": 73127.66476848949,
+    "gross_exposure": 0.2039140239884457,
+    "net_exposure": 0.2039140239884457,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-06-20 00:00:00",
+    "equity": 91828.57425107944,
+    "cash": 91828.57425107944,
+    "gross_exposure": 0.0,
+    "net_exposure": 0.0,
+    "n_positions": 0,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-06-23 00:00:00",
+    "equity": 91817.41350047626,
+    "cash": 84379.39243871807,
+    "gross_exposure": 0.08100882804458012,
+    "net_exposure": 0.08100882804458012,
+    "n_positions": 1,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-06-24 00:00:00",
+    "equity": 91922.07829363162,
+    "cash": 79995.01980830544,
+    "gross_exposure": 0.12975183662870346,
+    "net_exposure": 0.12975183662870346,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-06-25 00:00:00",
+    "equity": 91906.28452884787,
+    "cash": 79995.01980830544,
+    "gross_exposure": 0.12960228760856596,
+    "net_exposure": 0.12960228760856596,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-06-26 00:00:00",
+    "equity": 91998.7308371341,
+    "cash": 77599.03650386284,
+    "gross_exposure": 0.15652057590623866,
+    "net_exposure": 0.15652057590623866,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-06-27 00:00:00",
+    "equity": 92011.08225486103,
+    "cash": 66225.43731471497,
+    "gross_exposure": 0.2802449912361919,
+    "net_exposure": 0.2802449912361919,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-06-30 00:00:00",
+    "equity": 92175.67373306464,
+    "cash": 64615.88292950565,
+    "gross_exposure": 0.2989920191239452,
+    "net_exposure": 0.2989920191239452,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-07-01 00:00:00",
+    "equity": 92170.41855023365,
+    "cash": 61005.35780310736,
+    "gross_exposure": 0.3381243270598914,
+    "net_exposure": 0.3381243270598914,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-07-02 00:00:00",
+    "equity": 92195.8674634504,
+    "cash": 64391.491700170314,
+    "gross_exposure": 0.3015794148723932,
+    "net_exposure": 0.3015794148723932,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-07-03 00:00:00",
+    "equity": 92476.5556422198,
+    "cash": 64391.491700170314,
+    "gross_exposure": 0.30369928623539005,
+    "net_exposure": 0.30369928623539005,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-07-07 00:00:00",
+    "equity": 92219.39911147024,
+    "cash": 69576.69944987388,
+    "gross_exposure": 0.24553076554128253,
+    "net_exposure": 0.24553076554128253,
+    "n_positions": 2,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-07-08 00:00:00",
+    "equity": 92030.17640757367,
+    "cash": 54639.0086455203,
+    "gross_exposure": 0.4062924708136955,
+    "net_exposure": 0.4062924708136955,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-07-09 00:00:00",
+    "equity": 92217.17115189385,
+    "cash": 52694.889135355115,
+    "gross_exposure": 0.4285783387503865,
+    "net_exposure": 0.4285783387503865,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-07-10 00:00:00",
+    "equity": 92347.3503171795,
+    "cash": 52694.889135355115,
+    "gross_exposure": 0.42938385395609757,
+    "net_exposure": 0.42938385395609757,
+    "n_positions": 3,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-07-11 00:00:00",
+    "equity": 92087.26418144017,
+    "cash": 49819.962862168475,
+    "gross_exposure": 0.45899182362494934,
+    "net_exposure": 0.45899182362494934,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-07-14 00:00:00",
+    "equity": 92273.95002659918,
+    "cash": 50854.41835757205,
+    "gross_exposure": 0.4488756757144069,
+    "net_exposure": 0.4488756757144069,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-07-15 00:00:00",
+    "equity": 91946.66641316988,
+    "cash": 51852.05519123444,
+    "gross_exposure": 0.4360637833433462,
+    "net_exposure": 0.4360637833433462,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-07-16 00:00:00",
+    "equity": 92086.61097426512,
+    "cash": 51852.05519123444,
+    "gross_exposure": 0.4369208005089339,
+    "net_exposure": 0.4369208005089339,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-07-17 00:00:00",
+    "equity": 92421.28937717676,
+    "cash": 49763.208116845664,
+    "gross_exposure": 0.46156120032302245,
+    "net_exposure": 0.46156120032302245,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-07-18 00:00:00",
+    "equity": 92379.56877617401,
+    "cash": 49763.208116845664,
+    "gross_exposure": 0.46131802977542913,
+    "net_exposure": 0.46131802977542913,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-07-21 00:00:00",
+    "equity": 92388.93973093195,
+    "cash": 46890.97613359301,
+    "gross_exposure": 0.49246115097591225,
+    "net_exposure": 0.49246115097591225,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-07-22 00:00:00",
+    "equity": 92197.31592022197,
+    "cash": 49135.51493218674,
+    "gross_exposure": 0.4670613299122122,
+    "net_exposure": 0.4670613299122122,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-07-23 00:00:00",
+    "equity": 92458.57591909479,
+    "cash": 48148.75222368781,
+    "gross_exposure": 0.4792397379576771,
+    "net_exposure": 0.4792397379576771,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-07-24 00:00:00",
+    "equity": 92666.93707986915,
+    "cash": 47231.56824723452,
+    "gross_exposure": 0.4903083048215365,
+    "net_exposure": 0.4903083048215365,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-07-25 00:00:00",
+    "equity": 92798.45408992903,
+    "cash": 47776.84541816346,
+    "gross_exposure": 0.48515472712655405,
+    "net_exposure": 0.48515472712655405,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-07-28 00:00:00",
+    "equity": 92853.26659808258,
+    "cash": 47869.924374684946,
+    "gross_exposure": 0.48445621647441905,
+    "net_exposure": 0.48445621647441905,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-07-29 00:00:00",
+    "equity": 92630.43390192432,
+    "cash": 47046.359383447205,
+    "gross_exposure": 0.4921068875348337,
+    "net_exposure": 0.4921068875348337,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-07-30 00:00:00",
+    "equity": 92653.48370998324,
+    "cash": 48059.646250159734,
+    "gross_exposure": 0.4812969321197644,
+    "net_exposure": 0.4812969321197644,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-07-31 00:00:00",
+    "equity": 93221.159293315,
+    "cash": 49101.829786440234,
+    "gross_exposure": 0.473275915482405,
+    "net_exposure": 0.473275915482405,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-08-01 00:00:00",
+    "equity": 92156.14159416675,
+    "cash": 50327.98140902249,
+    "gross_exposure": 0.45388358780628335,
+    "net_exposure": 0.45388358780628335,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-08-04 00:00:00",
+    "equity": 92849.19398972759,
+    "cash": 50327.98140902249,
+    "gross_exposure": 0.4579599537009385,
+    "net_exposure": 0.4579599537009385,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-08-05 00:00:00",
+    "equity": 92512.4628954312,
+    "cash": 51312.26045451185,
+    "gross_exposure": 0.4453475904915515,
+    "net_exposure": 0.4453475904915515,
+    "n_positions": 4,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-08-06 00:00:00",
+    "equity": 92694.2423231108,
+    "cash": 49501.87045221573,
+    "gross_exposure": 0.46596607069009105,
+    "net_exposure": 0.46596607069009105,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-08-07 00:00:00",
+    "equity": 92570.97550737299,
+    "cash": 47936.067414438374,
+    "gross_exposure": 0.4821695768927008,
+    "net_exposure": 0.4821695768927008,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-08-08 00:00:00",
+    "equity": 92964.25990778004,
+    "cash": 47857.998015735066,
+    "gross_exposure": 0.4852000321068559,
+    "net_exposure": 0.4852000321068559,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-08-11 00:00:00",
+    "equity": 92864.46677874387,
+    "cash": 46228.511759182,
+    "gross_exposure": 0.5021937522203762,
+    "net_exposure": 0.5021937522203762,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-08-12 00:00:00",
+    "equity": 93355.72576954027,
+    "cash": 49959.62987362222,
+    "gross_exposure": 0.5449000383505014,
+    "net_exposure": 0.4648466447901277,
+    "n_positions": 8,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-08-13 00:00:00",
+    "equity": 93205.7584057485,
+    "cash": 53429.04045680313,
+    "gross_exposure": 0.5078728165963784,
+    "net_exposure": 0.42676245147630426,
+    "n_positions": 8,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-08-14 00:00:00",
+    "equity": 93401.22995268925,
+    "cash": 57051.17651135713,
+    "gross_exposure": 0.470046748661287,
+    "net_exposure": 0.38918174267881267,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-08-15 00:00:00",
+    "equity": 93218.25242903913,
+    "cash": 56085.506406986955,
+    "gross_exposure": 0.47936574518990316,
+    "net_exposure": 0.39834200979383155,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-08-18 00:00:00",
+    "equity": 93219.74985197383,
+    "cash": 56085.506406986955,
+    "gross_exposure": 0.47888168586903546,
+    "net_exposure": 0.39835167444617,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-08-19 00:00:00",
+    "equity": 92762.12573120906,
+    "cash": 50772.615423870404,
+    "gross_exposure": 0.4526579137374342,
+    "net_exposure": 0.4526579137374342,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-08-20 00:00:00",
+    "equity": 92598.3782315941,
+    "cash": 50555.04703957171,
+    "gross_exposure": 0.45403960625389683,
+    "net_exposure": 0.45403960625389683,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-08-21 00:00:00",
+    "equity": 92465.99404906263,
+    "cash": 50509.54275119863,
+    "gross_exposure": 0.4537500702755851,
+    "net_exposure": 0.4537500702755851,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-08-22 00:00:00",
+    "equity": 93122.58903121506,
+    "cash": 50509.54275119863,
+    "gross_exposure": 0.4576016058330635,
+    "net_exposure": 0.4576016058330635,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-08-25 00:00:00",
+    "equity": 92998.75456778254,
+    "cash": 47664.4385591096,
+    "gross_exposure": 0.4874722916383878,
+    "net_exposure": 0.4874722916383878,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-08-26 00:00:00",
+    "equity": 93110.75583034795,
+    "cash": 48493.222696258796,
+    "gross_exposure": 0.47918774513423923,
+    "net_exposure": 0.47918774513423923,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-08-27 00:00:00",
+    "equity": 93245.28472741012,
+    "cash": 48493.222696258796,
+    "gross_exposure": 0.4799391428958351,
+    "net_exposure": 0.4799391428958351,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-08-28 00:00:00",
+    "equity": 93443.90438075841,
+    "cash": 51671.73862966705,
+    "gross_exposure": 0.4470293276796438,
+    "net_exposure": 0.4470293276796438,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-08-29 00:00:00",
+    "equity": 93139.24789490242,
+    "cash": 52586.612704082676,
+    "gross_exposure": 0.43539792415522843,
+    "net_exposure": 0.43539792415522843,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-09-02 00:00:00",
+    "equity": 92815.10762107794,
+    "cash": 52586.612704082676,
+    "gross_exposure": 0.43342615171260684,
+    "net_exposure": 0.43342615171260684,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-09-03 00:00:00",
+    "equity": 93552.98930627556,
+    "cash": 50179.47555326667,
+    "gross_exposure": 0.4636250971202198,
+    "net_exposure": 0.4636250971202198,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-09-04 00:00:00",
+    "equity": 93988.48730236146,
+    "cash": 53117.22102534306,
+    "gross_exposure": 0.43485396403428994,
+    "net_exposure": 0.43485396403428994,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-09-05 00:00:00",
+    "equity": 93540.21917093167,
+    "cash": 49867.700444903894,
+    "gross_exposure": 0.46688493049414764,
+    "net_exposure": 0.46688493049414764,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-09-08 00:00:00",
+    "equity": 93680.80592065843,
+    "cash": 49867.700444903894,
+    "gross_exposure": 0.4676849760756906,
+    "net_exposure": 0.4676849760756906,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-09-09 00:00:00",
+    "equity": 93949.55326634774,
+    "cash": 49867.700444903894,
+    "gross_exposure": 0.46920768954027314,
+    "net_exposure": 0.46920768954027314,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-09-10 00:00:00",
+    "equity": 94161.52206369658,
+    "cash": 50378.271574496386,
+    "gross_exposure": 0.46498027569671757,
+    "net_exposure": 0.46498027569671757,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-09-11 00:00:00",
+    "equity": 94461.6233853882,
+    "cash": 50378.271574496386,
+    "gross_exposure": 0.4666800149203328,
+    "net_exposure": 0.4666800149203328,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-09-12 00:00:00",
+    "equity": 94633.24830839045,
+    "cash": 49871.33518479619,
+    "gross_exposure": 0.4730040860240191,
+    "net_exposure": 0.4730040860240191,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-09-15 00:00:00",
+    "equity": 95053.55853098913,
+    "cash": 54400.93645615596,
+    "gross_exposure": 0.4276812220720773,
+    "net_exposure": 0.4276812220720773,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-09-16 00:00:00",
+    "equity": 94833.25495543279,
+    "cash": 51344.30483657655,
+    "gross_exposure": 0.45858333281182867,
+    "net_exposure": 0.45858333281182867,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-09-17 00:00:00",
+    "equity": 94739.74864399568,
+    "cash": 52178.82781223748,
+    "gross_exposure": 0.4492403815814386,
+    "net_exposure": 0.4492403815814386,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-09-18 00:00:00",
+    "equity": 95002.56283271877,
+    "cash": 55223.58777079055,
+    "gross_exposure": 0.41871475753734505,
+    "net_exposure": 0.41871475753734505,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-09-19 00:00:00",
+    "equity": 95293.82515827412,
+    "cash": 54508.942495803945,
+    "gross_exposure": 0.42799082306466646,
+    "net_exposure": 0.42799082306466646,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-09-22 00:00:00",
+    "equity": 95418.34325239842,
+    "cash": 54508.942495803945,
+    "gross_exposure": 0.428737277992575,
+    "net_exposure": 0.428737277992575,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-09-23 00:00:00",
+    "equity": 95035.47364367727,
+    "cash": 52759.85429847116,
+    "gross_exposure": 0.4448404129989698,
+    "net_exposure": 0.4448404129989698,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-09-24 00:00:00",
+    "equity": 94832.26951667844,
+    "cash": 53121.27823004642,
+    "gross_exposure": 0.43983964002144,
+    "net_exposure": 0.43983964002144,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-09-25 00:00:00",
+    "equity": 94643.98804041586,
+    "cash": 50074.75320181625,
+    "gross_exposure": 0.47091459015407483,
+    "net_exposure": 0.47091459015407483,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-09-26 00:00:00",
+    "equity": 94894.66397422331,
+    "cash": 50074.75320181625,
+    "gross_exposure": 0.47231223438002473,
+    "net_exposure": 0.47231223438002473,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-09-29 00:00:00",
+    "equity": 95065.25177235856,
+    "cash": 50792.13552582258,
+    "gross_exposure": 0.46571292266233666,
+    "net_exposure": 0.46571292266233666,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-09-30 00:00:00",
+    "equity": 95172.48858299108,
+    "cash": 53809.79087629604,
+    "gross_exposure": 0.4346077140835345,
+    "net_exposure": 0.4346077140835345,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-10-01 00:00:00",
+    "equity": 95248.36391909418,
+    "cash": 53809.79087629604,
+    "gross_exposure": 0.43505810848359416,
+    "net_exposure": 0.43505810848359416,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-10-02 00:00:00",
+    "equity": 95276.89084785178,
+    "cash": 51455.45275528237,
+    "gross_exposure": 0.45993774253767494,
+    "net_exposure": 0.45993774253767494,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-10-03 00:00:00",
+    "equity": 95283.11027353977,
+    "cash": 51455.45275528237,
+    "gross_exposure": 0.4599729940850638,
+    "net_exposure": 0.4599729940850638,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-10-06 00:00:00",
+    "equity": 95599.43114427806,
+    "cash": 51455.45275528237,
+    "gross_exposure": 0.4617598437628135,
+    "net_exposure": 0.4617598437628135,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-10-07 00:00:00",
+    "equity": 95334.30041227049,
+    "cash": 49782.3539985059,
+    "gross_exposure": 0.47781277270380623,
+    "net_exposure": 0.47781277270380623,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-10-08 00:00:00",
+    "equity": 95540.51281081987,
+    "cash": 48854.33854246481,
+    "gross_exposure": 0.48865316811516946,
+    "net_exposure": 0.48865316811516946,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-10-09 00:00:00",
+    "equity": 95465.91988350856,
+    "cash": 52023.95294769266,
+    "gross_exposure": 0.4550520959607949,
+    "net_exposure": 0.4550520959607949,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-10-10 00:00:00",
+    "equity": 94176.06138066904,
+    "cash": 51437.509895741416,
+    "gross_exposure": 0.5460788488958642,
+    "net_exposure": 0.4538154479849623,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-10-13 00:00:00",
+    "equity": 94806.07190065694,
+    "cash": 50813.095644676854,
+    "gross_exposure": 0.4640312099638341,
+    "net_exposure": 0.4640312099638341,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-10-14 00:00:00",
+    "equity": 94846.86225577467,
+    "cash": 48492.62087962823,
+    "gross_exposure": 0.48872719954764987,
+    "net_exposure": 0.48872719954764987,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-10-15 00:00:00",
+    "equity": 95039.17390964624,
+    "cash": 52120.708467599536,
+    "gross_exposure": 0.4515871053640397,
+    "net_exposure": 0.4515871053640397,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-10-16 00:00:00",
+    "equity": 94609.67039540489,
+    "cash": 48774.20590078772,
+    "gross_exposure": 0.6716593197120649,
+    "net_exposure": 0.4844691277652244,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-10-17 00:00:00",
+    "equity": 94857.41772950941,
+    "cash": 50583.72993281448,
+    "gross_exposure": 0.5727182757812815,
+    "net_exposure": 0.46673933210941415,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-10-20 00:00:00",
+    "equity": 95271.94990606603,
+    "cash": 53451.40823505193,
+    "gross_exposure": 0.5270832091972293,
+    "net_exposure": 0.4389596487974405,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-10-21 00:00:00",
+    "equity": 95151.77923425508,
+    "cash": 51681.38087897079,
+    "gross_exposure": 0.5683030503584064,
+    "net_exposure": 0.4568532370610128,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-10-22 00:00:00",
+    "equity": 94931.24129449348,
+    "cash": 48919.51052969235,
+    "gross_exposure": 0.4846848112105119,
+    "net_exposure": 0.4846848112105119,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-10-23 00:00:00",
+    "equity": 95148.67324124732,
+    "cash": 50426.03666112278,
+    "gross_exposure": 0.4700290088830908,
+    "net_exposure": 0.4700290088830908,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-10-24 00:00:00",
+    "equity": 95598.52663028485,
+    "cash": 52212.303160989206,
+    "gross_exposure": 0.4538377838926989,
+    "net_exposure": 0.4538377838926989,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-10-27 00:00:00",
+    "equity": 96231.7224809408,
+    "cash": 51931.8823597964,
+    "gross_exposure": 0.46034549708822087,
+    "net_exposure": 0.46034549708822087,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-10-28 00:00:00",
+    "equity": 96431.56470483253,
+    "cash": 53120.08647698529,
+    "gross_exposure": 0.44914212851797425,
+    "net_exposure": 0.44914212851797425,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-10-29 00:00:00",
+    "equity": 96458.22835615365,
+    "cash": 53424.953922124296,
+    "gross_exposure": 0.4461337842028073,
+    "net_exposure": 0.4461337842028073,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-10-30 00:00:00",
+    "equity": 95726.59251069002,
+    "cash": 52399.09202570142,
+    "gross_exposure": 0.4526171813767435,
+    "net_exposure": 0.4526171813767435,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-10-31 00:00:00",
+    "equity": 95579.46176352439,
+    "cash": 50189.58900053844,
+    "gross_exposure": 0.4748914874127059,
+    "net_exposure": 0.4748914874127059,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-11-03 00:00:00",
+    "equity": 95567.28633693262,
+    "cash": 47248.735299089,
+    "gross_exposure": 0.5055971859187404,
+    "net_exposure": 0.5055971859187404,
+    "n_positions": 8,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-11-04 00:00:00",
+    "equity": 95009.6174096658,
+    "cash": 47584.214096147334,
+    "gross_exposure": 0.49916423838470964,
+    "net_exposure": 0.49916423838470964,
+    "n_positions": 7,
+    "risk_action": "SCALE_DOWN",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-11-05 00:00:00",
+    "equity": 95166.69017819889,
+    "cash": 46422.45154070085,
+    "gross_exposure": 0.5121985281428283,
+    "net_exposure": 0.5121985281428283,
+    "n_positions": 7,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-11-06 00:00:00",
+    "equity": 94627.35123757868,
+    "cash": 47367.75732990535,
+    "gross_exposure": 0.49942847696349213,
+    "net_exposure": 0.49942847696349213,
+    "n_positions": 7,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-11-07 00:00:00",
+    "equity": 94537.9967720297,
+    "cash": 47367.75732990535,
+    "gross_exposure": 0.49895535184515655,
+    "net_exposure": 0.49895535184515655,
+    "n_positions": 7,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-11-10 00:00:00",
+    "equity": 95308.1575250579,
+    "cash": 47599.68838307261,
+    "gross_exposure": 0.500570679161876,
+    "net_exposure": 0.500570679161876,
+    "n_positions": 7,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-11-11 00:00:00",
+    "equity": 95525.38274006355,
+    "cash": 46787.092109042445,
+    "gross_exposure": 0.5102129845806956,
+    "net_exposure": 0.5102129845806956,
+    "n_positions": 7,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-11-12 00:00:00",
+    "equity": 95409.96187965263,
+    "cash": 46347.50963979785,
+    "gross_exposure": 0.5142277732145072,
+    "net_exposure": 0.5142277732145072,
+    "n_positions": 7,
+    "risk_action": "SCALE_DOWN",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-11-13 00:00:00",
+    "equity": 94676.23329137957,
+    "cash": 45774.459259812415,
+    "gross_exposure": 0.5165158385744497,
+    "net_exposure": 0.5165158385744497,
+    "n_positions": 7,
+    "risk_action": "SCALE_DOWN",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-11-14 00:00:00",
+    "equity": 94686.40207735098,
+    "cash": 47594.56093545428,
+    "gross_exposure": 0.4973453432460825,
+    "net_exposure": 0.4973453432460825,
+    "n_positions": 6,
+    "risk_action": "SCALE_DOWN",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-11-17 00:00:00",
+    "equity": 94359.29795609711,
+    "cash": 46089.69078079316,
+    "gross_exposure": 0.5115511478027585,
+    "net_exposure": 0.5115511478027585,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-11-18 00:00:00",
+    "equity": 93761.92079665094,
+    "cash": 45033.10961709447,
+    "gross_exposure": 0.519707902371567,
+    "net_exposure": 0.519707902371567,
+    "n_positions": 6,
+    "risk_action": "SCALE_DOWN",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2025-11-19 00:00:00",
+    "equity": 93943.48367312262,
+    "cash": 45847.021871813624,
+    "gross_exposure": 0.5119723042064437,
+    "net_exposure": 0.5119723042064437,
+    "n_positions": 6,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-11-20 00:00:00",
+    "equity": 93163.31453958972,
+    "cash": 44013.02572089229,
+    "gross_exposure": 0.7206918180081895,
+    "net_exposure": 0.5275712769730947,
+    "n_positions": 7,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-11-21 00:00:00",
+    "equity": 93688.01877914328,
+    "cash": 44434.90473668043,
+    "gross_exposure": 0.6967808550493362,
+    "net_exposure": 0.525714116749233,
+    "n_positions": 7,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-11-24 00:00:00",
+    "equity": 95031.27853141297,
+    "cash": 46836.289364952616,
+    "gross_exposure": 0.689608512533477,
+    "net_exposure": 0.5071486978945496,
+    "n_positions": 7,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-11-25 00:00:00",
+    "equity": 95610.23816605347,
+    "cash": 47944.26342103722,
+    "gross_exposure": 0.6928576618855917,
+    "net_exposure": 0.49854467114945555,
+    "n_positions": 7,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-11-26 00:00:00",
+    "equity": 95833.75236225735,
+    "cash": 45225.15471579443,
+    "gross_exposure": 0.5280874055224237,
+    "net_exposure": 0.5280874055224237,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-11-28 00:00:00",
+    "equity": 96195.3343382687,
+    "cash": 46034.19945293989,
+    "gross_exposure": 0.5214508087152993,
+    "net_exposure": 0.5214508087152993,
+    "n_positions": 6,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-12-01 00:00:00",
+    "equity": 95987.7018094004,
+    "cash": 46043.13585993876,
+    "gross_exposure": 0.5203225518268466,
+    "net_exposure": 0.5203225518268466,
+    "n_positions": 6,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-12-02 00:00:00",
+    "equity": 96280.756917291,
+    "cash": 46043.16909432958,
+    "gross_exposure": 0.5217822276378394,
+    "net_exposure": 0.5217822276378394,
+    "n_positions": 6,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-12-03 00:00:00",
+    "equity": 96156.86281663604,
+    "cash": 45060.266227415435,
+    "gross_exposure": 0.5313879331385634,
+    "net_exposure": 0.5313879331385634,
+    "n_positions": 7,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-12-04 00:00:00",
+    "equity": 96162.84165306058,
+    "cash": 44435.46791377842,
+    "gross_exposure": 0.5379143632829181,
+    "net_exposure": 0.5379143632829181,
+    "n_positions": 7,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-12-05 00:00:00",
+    "equity": 96322.36033002863,
+    "cash": 46517.62815881223,
+    "gross_exposure": 0.5170630370826753,
+    "net_exposure": 0.5170630370826753,
+    "n_positions": 7,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-12-08 00:00:00",
+    "equity": 96097.69754011044,
+    "cash": 45707.29947875455,
+    "gross_exposure": 0.5243663412468684,
+    "net_exposure": 0.5243663412468684,
+    "n_positions": 7,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-12-09 00:00:00",
+    "equity": 96076.45130492185,
+    "cash": 51240.96347607121,
+    "gross_exposure": 0.4666646948330178,
+    "net_exposure": 0.4666646948330178,
+    "n_positions": 5,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-12-10 00:00:00",
+    "equity": 96288.38699811115,
+    "cash": 47057.679660593145,
+    "gross_exposure": 0.5112839551303705,
+    "net_exposure": 0.5112839551303705,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-12-11 00:00:00",
+    "equity": 96240.98964801981,
+    "cash": 46938.7130590378,
+    "gross_exposure": 0.5122794016280818,
+    "net_exposure": 0.5122794016280818,
+    "n_positions": 6,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-12-12 00:00:00",
+    "equity": 95818.78519767037,
+    "cash": 49239.40614997913,
+    "gross_exposure": 0.4861194905737932,
+    "net_exposure": 0.4861194905737932,
+    "n_positions": 5,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-12-15 00:00:00",
+    "equity": 95631.84752415516,
+    "cash": 46842.41494826245,
+    "gross_exposure": 0.5101797553745809,
+    "net_exposure": 0.5101797553745809,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-12-16 00:00:00",
+    "equity": 95518.14909993863,
+    "cash": 44930.667524217395,
+    "gross_exposure": 0.5296112000955192,
+    "net_exposure": 0.5296112000955192,
+    "n_positions": 5,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-12-17 00:00:00",
+    "equity": 94874.24483640204,
+    "cash": 47923.95417825288,
+    "gross_exposure": 0.4948686626081574,
+    "net_exposure": 0.4948686626081574,
+    "n_positions": 5,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-12-18 00:00:00",
+    "equity": 95187.27912294611,
+    "cash": 48451.82616650029,
+    "gross_exposure": 0.49098423011000486,
+    "net_exposure": 0.49098423011000486,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-12-19 00:00:00",
+    "equity": 95562.95708493408,
+    "cash": 49442.116528317,
+    "gross_exposure": 0.4826225763987814,
+    "net_exposure": 0.4826225763987814,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-12-22 00:00:00",
+    "equity": 95776.0364538185,
+    "cash": 50591.875876214646,
+    "gross_exposure": 0.47176895443351174,
+    "net_exposure": 0.47176895443351174,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-12-23 00:00:00",
+    "equity": 95991.88231292706,
+    "cash": 50591.875876214646,
+    "gross_exposure": 0.47295672657726884,
+    "net_exposure": 0.47295672657726884,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2025-12-24 00:00:00",
+    "equity": 96153.35190520342,
+    "cash": 51394.8616370754,
+    "gross_exposure": 0.4654906914972131,
+    "net_exposure": 0.4654906914972131,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-12-26 00:00:00",
+    "equity": 96111.62917307156,
+    "cash": 51394.8616370754,
+    "gross_exposure": 0.4652586572585625,
+    "net_exposure": 0.4652586572585625,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-12-29 00:00:00",
+    "equity": 95952.1582057605,
+    "cash": 49623.59368976262,
+    "gross_exposure": 0.4828298329324762,
+    "net_exposure": 0.4828298329324762,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-12-30 00:00:00",
+    "equity": 95905.30239719809,
+    "cash": 49476.76015470359,
+    "gross_exposure": 0.48410818882784656,
+    "net_exposure": 0.48410818882784656,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2025-12-31 00:00:00",
+    "equity": 95591.99011838484,
+    "cash": 49672.35858468003,
+    "gross_exposure": 0.4803711218569271,
+    "net_exposure": 0.4803711218569271,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2026-01-02 00:00:00",
+    "equity": 95724.65978983084,
+    "cash": 51057.48023464555,
+    "gross_exposure": 0.46662145003445016,
+    "net_exposure": 0.46662145003445016,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2026-01-05 00:00:00",
+    "equity": 96182.87106275882,
+    "cash": 49915.772847100794,
+    "gross_exposure": 0.4810326173926434,
+    "net_exposure": 0.4810326173926434,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2026-01-06 00:00:00",
+    "equity": 96107.35417607424,
+    "cash": 52788.771857119114,
+    "gross_exposure": 0.4507311921166092,
+    "net_exposure": 0.4507311921166092,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2026-01-07 00:00:00",
+    "equity": 95956.83835490764,
+    "cash": 52477.625237073466,
+    "gross_exposure": 0.4531121894306395,
+    "net_exposure": 0.4531121894306395,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2026-01-08 00:00:00",
+    "equity": 95967.14420303614,
+    "cash": 50108.30933434293,
+    "gross_exposure": 0.4778597430352872,
+    "net_exposure": 0.4778597430352872,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "NEUTRAL"
+  },
+  {
+    "timestamp": "2026-01-09 00:00:00",
+    "equity": 96161.6030622644,
+    "cash": 52766.70681884637,
+    "gross_exposure": 0.45127051610526864,
+    "net_exposure": 0.45127051610526864,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2026-01-12 00:00:00",
+    "equity": 96153.60298508905,
+    "cash": 55150.0263494313,
+    "gross_exposure": 0.4264382754540811,
+    "net_exposure": 0.4264382754540811,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2026-01-13 00:00:00",
+    "equity": 96010.97978554264,
+    "cash": 50509.67555702275,
+    "gross_exposure": 0.47391771576704084,
+    "net_exposure": 0.47391771576704084,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2026-01-14 00:00:00",
+    "equity": 95885.87589101962,
+    "cash": 49727.09029529678,
+    "gross_exposure": 0.48139295977423446,
+    "net_exposure": 0.48139295977423446,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2026-01-15 00:00:00",
+    "equity": 95843.36972976956,
+    "cash": 53869.396481867654,
+    "gross_exposure": 0.43794342129505204,
+    "net_exposure": 0.43794342129505204,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2026-01-16 00:00:00",
+    "equity": 95711.1091359476,
+    "cash": 51377.65915100508,
+    "gross_exposure": 0.46320067111511065,
+    "net_exposure": 0.46320067111511065,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2026-01-20 00:00:00",
+    "equity": 94680.77446840485,
+    "cash": 49141.479740860384,
+    "gross_exposure": 0.48097720982141967,
+    "net_exposure": 0.48097720982141967,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2026-01-21 00:00:00",
+    "equity": 95194.60029180217,
+    "cash": 49354.235140881414,
+    "gross_exposure": 0.48154375364154317,
+    "net_exposure": 0.48154375364154317,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2026-01-22 00:00:00",
+    "equity": 95454.20074174469,
+    "cash": 50149.883978483704,
+    "gross_exposure": 0.47461836578396055,
+    "net_exposure": 0.47461836578396055,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2026-01-23 00:00:00",
+    "equity": 95323.09937533425,
+    "cash": 49697.230476628014,
+    "gross_exposure": 0.4786444125054579,
+    "net_exposure": 0.4786444125054579,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  },
+  {
+    "timestamp": "2026-01-26 00:00:00",
+    "equity": 95811.68203926086,
+    "cash": 47737.12436223743,
+    "gross_exposure": 0.5017609194808194,
+    "net_exposure": 0.5017609194808194,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2026-01-27 00:00:00",
+    "equity": 96046.40533732768,
+    "cash": 48994.78498355189,
+    "gross_exposure": 0.48988424073263637,
+    "net_exposure": 0.48988424073263637,
+    "n_positions": 6,
+    "risk_action": "SCALE_DOWN",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2026-01-28 00:00:00",
+    "equity": 96080.99531830644,
+    "cash": 49814.46170211803,
+    "gross_exposure": 0.4815367853227597,
+    "net_exposure": 0.4815367853227597,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2026-01-29 00:00:00",
+    "equity": 96171.88098670839,
+    "cash": 51360.09487038778,
+    "gross_exposure": 0.465955180002291,
+    "net_exposure": 0.465955180002291,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2026-01-30 00:00:00",
+    "equity": 96051.72609173706,
+    "cash": 50964.37849615752,
+    "gross_exposure": 0.46940694800755095,
+    "net_exposure": 0.46940694800755095,
+    "n_positions": 5,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2026-02-02 00:00:00",
+    "equity": 96196.67305473406,
+    "cash": 48474.51112001203,
+    "gross_exposure": 0.49608952596072664,
+    "net_exposure": 0.49608952596072664,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BULL"
+  },
+  {
+    "timestamp": "2026-02-03 00:00:00",
+    "equity": 95955.96634851833,
+    "cash": 48029.52111174771,
+    "gross_exposure": 0.4994629001254456,
+    "net_exposure": 0.4994629001254456,
+    "n_positions": 6,
+    "risk_action": "ALLOW",
+    "regime": "BEAR"
+  }
+]

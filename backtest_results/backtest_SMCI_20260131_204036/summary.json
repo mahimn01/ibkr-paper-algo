@@ -1,0 +1,50 @@
+{
+  "config": {
+    "symbols": [
+      "SMCI"
+    ],
+    "start_date": "2024-01-01",
+    "end_date": "2026-01-31",
+    "initial_capital": 100000,
+    "commission_per_share": 0.005,
+    "slippage_pct": 0.0005,
+    "max_positions": 5,
+    "bar_size": "5 mins"
+  },
+  "metrics": {
+    "total_pnl": -54.02,
+    "total_return": -90.02,
+    "total_return_pct": -0.09,
+    "annualized_return": -0.0457,
+    "cagr": -0.0457,
+    "sharpe_ratio": -0.16,
+    "sortino_ratio": -0.07,
+    "calmar_ratio": -0.01,
+    "max_drawdown": 4035.36,
+    "max_drawdown_pct": 3.8822,
+    "volatility": 10.5601,
+    "total_trades": 36,
+    "winning_trades": 15,
+    "losing_trades": 21,
+    "win_rate": 41.6667,
+    "profit_factor": 0.91,
+    "expectancy": -1.5,
+    "avg_win": 36.09,
+    "avg_loss": -28.35,
+    "largest_win": 74.91,
+    "largest_loss": -101.64,
+    "avg_trade": -1.5,
+    "avg_daily_pnl": -0.11,
+    "best_day": 74.91,
+    "worst_day": -101.64,
+    "max_consecutive_wins": 2,
+    "max_consecutive_losses": 6,
+    "avg_hold_time_minutes": 301.9,
+    "time_in_market_pct": 1.78
+  },
+  "trades_count": 36,
+  "daily_results_count": 496,
+  "equity_points_count": 38475,
+  "drawdown_periods_count": 8,
+  "export_timestamp": "2026-01-31T20:40:36.571650"
+}
