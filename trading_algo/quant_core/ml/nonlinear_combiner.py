@@ -845,6 +845,7 @@ class NonlinearSignalCombiner:
                 random_state=42,
                 n_jobs=-1,
                 verbosity=0,
+                early_stopping_rounds=cfg.early_stopping_rounds,
             )
 
         # --- LightGBM ---
@@ -879,6 +880,7 @@ class NonlinearSignalCombiner:
                 random_state=42,
                 n_jobs=-1,
                 verbosity=0,
+                early_stopping_rounds=cfg.early_stopping_rounds,
             )
 
         # --- LightGBM fallback ---
@@ -991,23 +993,15 @@ class NonlinearSignalCombiner:
         es_rounds = self.config.early_stopping_rounds
 
         if self._model_backend == "xgboost":
+            # early_stopping_rounds is set at construction time (XGBoost 3.x)
             fit_kwargs: Dict[str, Any] = {
                 "eval_set": [(X_val, y_val)],
                 "verbose": False,
             }
-            # XGBoost >= 1.6 uses callbacks for early stopping
-            try:
-                callback = xgb.callback.EarlyStopping(
-                    rounds=es_rounds,
-                    metric_name="rmse",
-                    save_best=True,
-                )
-                fit_kwargs["callbacks"] = [callback]
-            except AttributeError:
-                fit_kwargs["early_stopping_rounds"] = es_rounds
 
             if sample_weight is not None:
                 fit_kwargs["sample_weight"] = sample_weight
+
             self._model.fit(X_trn, y_trn, **fit_kwargs)
 
         elif self._model_backend == "lightgbm":

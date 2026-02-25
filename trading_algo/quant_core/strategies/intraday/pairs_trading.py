@@ -99,6 +99,11 @@ class PairsTradingStrategy:
         returns_a = np.diff(prices_a) / prices_a[:-1]
         returns_b = np.diff(prices_b) / prices_b[:-1]
 
+        # Align lengths (symbols may have different bar counts)
+        min_len = min(len(returns_a), len(returns_b))
+        returns_a = returns_a[-min_len:]
+        returns_b = returns_b[-min_len:]
+
         correlation = np.corrcoef(returns_a, returns_b)[0, 1]
         return float(correlation)
 
@@ -115,11 +120,16 @@ class PairsTradingStrategy:
         if len(prices_a) < 2 or len(prices_b) < 2:
             return 1.0
 
-        # Linear regression
-        slope, intercept, r_value, p_value, std_err = stats.linregress(
-            prices_b[-self.config.lookback_period:],
-            prices_a[-self.config.lookback_period:]
-        )
+        # Align lengths and apply lookback
+        min_len = min(len(prices_a), len(prices_b), self.config.lookback_period)
+        pa = prices_a[-min_len:]
+        pb = prices_b[-min_len:]
+
+        # Guard: constant prices cause singular regression
+        if np.ptp(pb) == 0:
+            return 1.0
+
+        slope, intercept, r_value, p_value, std_err = stats.linregress(pb, pa)
 
         return float(slope)
 

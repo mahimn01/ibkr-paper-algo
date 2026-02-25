@@ -1,0 +1,375 @@
+/Users/mahimnpatel/Documents/Dev/randomThings/.venv/lib/python3.14/site-packages/numpy/lib/_function_base_impl.py:4671: RuntimeWarning: invalid value encountered in subtract
+  diff_b_a = subtract(b, a)
+==============================================================================
+  NOVEL PATTERN DISCOVERY ENGINE
+==============================================================================
+  Date: 2026-02-24 19:29:49
+
+==============================================================================
+  DATA LOADING
+==============================================================================
+  Available symbols: AAPL, GOOGL, IWM, NVDA, QQQ, SMCI, SPY
+  AAPL: 19548 5-min bars, 252 days, $187.73 -> $250.38
+  GOOGL: 19548 5-min bars, 252 days, $138.89 -> $189.33
+  IWM: 40500 5-min bars, 522 days, $200.40 -> $259.64
+  NVDA: 19548 5-min bars, 252 days, $48.34 -> $134.29
+  QQQ: 40500 5-min bars, 522 days, $405.09 -> $621.81
+  SMCI: 40500 5-min bars, 522 days, $27.95 -> $29.14
+  SPY: 40500 5-min bars, 522 days, $472.67 -> $691.84
+
+==============================================================================
+  ANALYSIS 1: CROSS-ASSET LEAD-LAG
+==============================================================================
+  GOOGL -> AAPL: lag=4 bars (20min), corr=+0.0241
+  NVDA -> AAPL: lag=1 bars (5min), corr=-0.0453
+  NVDA -> GOOGL: lag=1 bars (5min), corr=-0.0242
+  NVDA -> IWM: lag=6 bars (30min), corr=-0.0215
+  IWM -> QQQ: lag=10 bars (50min), corr=+0.0359
+  IWM -> SMCI: lag=5 bars (25min), corr=-0.0322
+  IWM -> SPY: lag=10 bars (50min), corr=+0.0393
+  SMCI -> QQQ: lag=1 bars (5min), corr=+0.0294
+  SPY -> QQQ: lag=10 bars (50min), corr=+0.0364
+  SPY -> SMCI: lag=5 bars (25min), corr=-0.0272
+
+  Top lead-lag pairs (|corr| > 0.015):
+     NVDA -> AAPL   lag= 1 (  5min)  corr=-0.0453
+      IWM -> SPY    lag=10 ( 50min)  corr=+0.0393
+      SPY -> IWM    lag= 8 ( 40min)  corr=-0.0388
+      SPY -> QQQ    lag=10 ( 50min)  corr=+0.0364
+      IWM -> QQQ    lag=10 ( 50min)  corr=+0.0359
+      SPY -> QQQ    lag= 8 ( 40min)  corr=-0.0350
+      QQQ -> SPY    lag=10 ( 50min)  corr=+0.0330
+      IWM -> SMCI   lag= 5 ( 25min)  corr=-0.0322
+      QQQ -> IWM    lag= 8 ( 40min)  corr=-0.0317
+     NVDA -> AAPL   lag= 2 ( 10min)  corr=-0.0314
+      QQQ -> SPY    lag= 8 ( 40min)  corr=-0.0304
+      IWM -> QQQ    lag= 5 ( 25min)  corr=-0.0299
+     SMCI -> QQQ    lag= 1 (  5min)  corr=+0.0294
+      SPY -> QQQ    lag=14 ( 70min)  corr=-0.0288
+     AAPL -> NVDA   lag= 1 (  5min)  corr=-0.0283
+
+==============================================================================
+  ANALYSIS 2: TRANSFER ENTROPY (NONLINEAR CAUSAL FLOW)
+==============================================================================
+  Transfer Entropy (TE) for all directed pairs:
+  Source -> Target  TE(A->B)  TE(B->A)  Asymmetry
+  ------------------------------------------------------------------------------
+
+==============================================================================
+  ANALYSIS 3: INTRADAY TIME-OF-DAY PROFILE
+==============================================================================
+
+  SPY Time-of-Day Profile (top Sharpe buckets):
+     Time   Mean Ret      Std   Sharpe   AutoCorr  Regime
+  ------------------------------------------------------------------------------
+    15:30  -0.000137  0.00084    -2.58    +0.2107  MOM
+    12:45  +0.000098  0.00070    +2.22    +0.0673  MOM
+    14:05  -0.000084  0.00063    -2.12    -0.1549  MR
+    15:20  -0.000096  0.00073    -2.10    -0.2544  MR
+    14:15  +0.000091  0.00071    +2.04    +0.1679  MOM
+    15:40  +0.000092  0.00083    +1.76    +0.0347  MOM
+    11:20  -0.000094  0.00087    -1.71    -0.1490  MR
+    09:35  -0.000098  0.00095    -1.64    -0.0723  MR
+    12:50  -0.000072  0.00070    -1.62    -0.2116  MR
+    12:05  +0.000066  0.00067    +1.58    -0.0128  RND
+    15:55  +0.000600  0.00627    +1.52    +0.0000  RND
+    14:25  +0.000067  0.00071    +1.51    -0.0808  MR
+    15:10  +0.000056  0.00065    +1.37    -0.1636  MR
+    10:45  -0.000094  0.00109    -1.37    -0.1447  MR
+    12:35  -0.000054  0.00068    -1.26    -0.0065  RND
+    11:50  -0.000058  0.00076    -1.21    +0.0539  MOM
+    11:45  +0.000052  0.00068    +1.20    +0.0983  MOM
+    10:50  -0.000068  0.00090    -1.20    +0.0541  MOM
+    13:30  +0.000064  0.00085    +1.19    +0.2504  MOM
+    13:40  +0.000055  0.00078    +1.12    +0.0254  MOM
+
+  SPY Period Summaries:
+    Morning (9:30-10:30)          Sharpe=+0.033  AutoCorr=+0.0159  -> MOMENTUM
+    Midday (10:30-14:00)          Sharpe=+0.072  AutoCorr=-0.0049  -> RANDOM
+    Afternoon (14:00-15:30)       Sharpe=-0.047  AutoCorr=-0.0412  -> MEAN-REVERSION
+    Close (15:30-16:00)           Sharpe=+0.210  AutoCorr=+0.0303  -> MOMENTUM
+
+==============================================================================
+  ANALYSIS 4: OVERNIGHT GAP ANALYSIS
+==============================================================================
+
+  AAPL: 251 overnight gaps, mean |gap|=0.604%
+      Gap Size  Count  1h Rev  Day Rev  Mean 1h Ret  Signal
+  ------------------------------------------------------------------------------
+          Tiny     50  42.0%   50.0%     +0.2547%  FOLLOW
+         Small     50  54.0%   56.0%     +0.0241%  NEUTRAL
+        Medium     50  44.0%   50.0%     +0.2614%  FOLLOW
+         Large     50  54.0%   44.0%     -0.0112%  NEUTRAL
+          Huge     51  41.2%   49.0%     +0.0141%  FOLLOW
+
+  GOOGL: 251 overnight gaps, mean |gap|=0.770%
+      Gap Size  Count  1h Rev  Day Rev  Mean 1h Ret  Signal
+  ------------------------------------------------------------------------------
+          Tiny     50  46.0%   36.0%     +0.2665%  NEUTRAL
+         Small     50  48.0%   46.0%     +0.1087%  NEUTRAL
+        Medium     50  58.0%   50.0%     +0.0495%  FADE
+         Large     50  56.0%   52.0%     +0.0658%  FADE
+          Huge     51  49.0%   58.8%     -0.1209%  NEUTRAL
+
+  IWM: 521 overnight gaps, mean |gap|=0.631%
+      Gap Size  Count  1h Rev  Day Rev  Mean 1h Ret  Signal
+  ------------------------------------------------------------------------------
+          Tiny    104  52.9%   47.1%     -0.0732%  NEUTRAL
+         Small    104  43.3%   51.9%     -0.0222%  FOLLOW
+        Medium    104  58.7%   46.2%     -0.0539%  FADE
+         Large    104  49.0%   49.0%     +0.0515%  NEUTRAL
+          Huge    105  61.9%   57.1%     +0.0252%  FADE
+
+  NVDA: 251 overnight gaps, mean |gap|=1.371%
+      Gap Size  Count  1h Rev  Day Rev  Mean 1h Ret  Signal
+  ------------------------------------------------------------------------------
+          Tiny     50  44.0%   54.0%     -0.5217%  FOLLOW
+         Small     50  54.0%   58.0%     +0.0810%  NEUTRAL
+        Medium     50  52.0%   48.0%     +0.1159%  NEUTRAL
+         Large     50  40.0%   38.0%     +0.2467%  FOLLOW
+          Huge     51  41.2%   51.0%     -0.0359%  FOLLOW
+
+  QQQ: 521 overnight gaps, mean |gap|=0.558%
+      Gap Size  Count  1h Rev  Day Rev  Mean 1h Ret  Signal
+  ------------------------------------------------------------------------------
+          Tiny    104  44.2%   48.1%     -0.0652%  FOLLOW
+         Small    104  55.8%   51.0%     -0.0284%  FADE
+        Medium    104  50.0%   46.2%     +0.0756%  NEUTRAL
+         Large    104  49.0%   52.9%     -0.0728%  NEUTRAL
+          Huge    105  52.4%   53.3%     +0.0663%  NEUTRAL
+
+  SMCI: 521 overnight gaps, mean |gap|=2.516%
+      Gap Size  Count  1h Rev  Day Rev  Mean 1h Ret  Signal
+  ------------------------------------------------------------------------------
+          Tiny    104  52.9%   55.8%     +0.0789%  NEUTRAL
+         Small    104  52.9%   51.0%     +0.2049%  NEUTRAL
+        Medium    104  51.9%   56.7%     +0.2040%  NEUTRAL
+         Large    104  51.0%   53.8%     -0.0953%  NEUTRAL
+          Huge    105  49.5%   53.3%     +0.1501%  NEUTRAL
+
+  SPY: 521 overnight gaps, mean |gap|=0.407%
+      Gap Size  Count  1h Rev  Day Rev  Mean 1h Ret  Signal
+  ------------------------------------------------------------------------------
+          Tiny    104  46.2%   48.1%     -0.0371%  NEUTRAL
+         Small    104  55.8%   56.7%     +0.0180%  FADE
+        Medium    104  52.9%   56.7%     +0.0000%  NEUTRAL
+         Large    104  47.1%   46.2%     -0.0265%  NEUTRAL
+          Huge    105  48.6%   51.4%     +0.0517%  NEUTRAL
+
+==============================================================================
+  ANALYSIS 5: HURST EXPONENT (FRACTAL STRUCTURE)
+==============================================================================
+   AAPL: H(daily,R/S)=0.586  H(daily,DFA)=0.503  H(5m,R/S)=0.544  regime=trending
+         Rolling regime: 1.0% MR | 17.6% RW | 81.4% MOM
+  GOOGL: H(daily,R/S)=0.629  H(daily,DFA)=0.495  H(5m,R/S)=0.553  regime=trending
+         Rolling regime: 19.5% MR | 28.1% RW | 52.4% MOM
+    IWM: H(daily,R/S)=0.535  H(daily,DFA)=0.474  H(5m,R/S)=0.508  regime=random_walk
+         Rolling regime: 12.9% MR | 15.2% RW | 71.9% MOM
+   NVDA: H(daily,R/S)=0.610  H(daily,DFA)=0.490  H(5m,R/S)=0.547  regime=trending
+         Rolling regime: 8.6% MR | 21.9% RW | 69.5% MOM
+    QQQ: H(daily,R/S)=0.578  H(daily,DFA)=0.476  H(5m,R/S)=0.543  regime=trending
+         Rolling regime: 8.3% MR | 21.0% RW | 70.6% MOM
+   SMCI: H(daily,R/S)=0.619  H(daily,DFA)=0.541  H(5m,R/S)=0.563  regime=trending
+         Rolling regime: 4.4% MR | 19.0% RW | 76.7% MOM
+    SPY: H(daily,R/S)=0.544  H(daily,DFA)=0.459  H(5m,R/S)=0.531  regime=random_walk
+         Rolling regime: 10.2% MR | 11.0% RW | 78.8% MOM
+
+  KEY INSIGHT: Fraction of time each regime is tradeable:
+    AAPL: 82.4% tradeable (MR=1.0%, MOM=81.4%), skip 17.6% random walk
+    GOOGL: 71.9% tradeable (MR=19.5%, MOM=52.4%), skip 28.1% random walk
+    IWM: 84.8% tradeable (MR=12.9%, MOM=71.9%), skip 15.2% random walk
+    NVDA: 78.1% tradeable (MR=8.6%, MOM=69.5%), skip 21.9% random walk
+    QQQ: 79.0% tradeable (MR=8.3%, MOM=70.6%), skip 21.0% random walk
+    SMCI: 81.0% tradeable (MR=4.4%, MOM=76.7%), skip 19.0% random walk
+    SPY: 89.0% tradeable (MR=10.2%, MOM=78.8%), skip 11.0% random walk
+
+==============================================================================
+  ANALYSIS 6: ENTROPY ANALYSIS
+==============================================================================
+   AAPL: SampEn(daily)=1.873  PermEn(daily)=0.993  SampEn(5m)=1.537
+         Low entropy 5d fwd: +0.00503 (Sharpe=+1.13)  High entropy 5d fwd: +0.00912 (Sharpe=+3.03)
+  GOOGL: SampEn(daily)=2.021  PermEn(daily)=0.992  SampEn(5m)=1.347
+         Low entropy 5d fwd: +0.00890 (Sharpe=+1.28)  High entropy 5d fwd: +nan (Sharpe=+nan)
+    IWM: SampEn(daily)=2.046  PermEn(daily)=0.995  SampEn(5m)=1.533
+         Low entropy 5d fwd: +0.00046 (Sharpe=+0.11)  High entropy 5d fwd: +nan (Sharpe=+nan)
+   NVDA: SampEn(daily)=2.146  PermEn(daily)=0.993  SampEn(5m)=1.452
+         Low entropy 5d fwd: +0.02628 (Sharpe=+2.80)  High entropy 5d fwd: +nan (Sharpe=+nan)
+    QQQ: SampEn(daily)=1.836  PermEn(daily)=0.990  SampEn(5m)=1.637
+         Low entropy 5d fwd: +0.00932 (Sharpe=+3.17)  High entropy 5d fwd: +nan (Sharpe=+nan)
+   SMCI: SampEn(daily)=1.744  PermEn(daily)=0.995  SampEn(5m)=1.357
+         Low entropy 5d fwd: +0.00086 (Sharpe=+0.03)  High entropy 5d fwd: -0.01914 (Sharpe=-1.21)
+    SPY: SampEn(daily)=1.807  PermEn(daily)=0.985  SampEn(5m)=1.609
+         Low entropy 5d fwd: +0.00942 (Sharpe=+4.77)  High entropy 5d fwd: -0.00063 (Sharpe=-0.15)
+
+  KEY INSIGHT: Entropy as predictive filter
+    AAPL: Low-High return spread = -0.00410 -> TRADE HIGH ENTROPY
+    SMCI: Low-High return spread = +0.02000 -> TRADE LOW ENTROPY
+    SPY: Low-High return spread = +0.01004 -> TRADE LOW ENTROPY
+
+==============================================================================
+  ANALYSIS 7: ORDINAL PATTERN ANALYSIS
+==============================================================================
+
+  AAPL:
+    Order-3 patterns: 6 observed (max 6)
+    Order-4 patterns: 24 observed (max 24)
+    Forbidden order-4 patterns: 0
+    Most common order-3: (1, 0, 2) = 0.177
+    Least common order-3: (2, 0, 1) = 0.153
+    Max deviation from uniform: 0.0141 (weak)
+    Most predictive transition: after (2, 1, 0) -> (1, 0, 2) (p=0.548)
+
+  GOOGL:
+    Order-3 patterns: 6 observed (max 6)
+    Order-4 patterns: 24 observed (max 24)
+    Forbidden order-4 patterns: 0
+    Most common order-3: (0, 1, 2) = 0.197
+    Least common order-3: (0, 2, 1) = 0.153
+    Max deviation from uniform: 0.0301 (significant)
+    Most predictive transition: after (2, 0, 1) -> (0, 1, 2) (p=0.553)
+
+  IWM:
+    Order-3 patterns: 6 observed (max 6)
+    Order-4 patterns: 24 observed (max 24)
+    Forbidden order-4 patterns: 0
+    Most common order-3: (2, 1, 0) = 0.175
+    Least common order-3: (2, 0, 1) = 0.152
+    Max deviation from uniform: 0.0145 (weak)
+    Most predictive transition: after (0, 1, 2) -> (1, 2, 0) (p=0.584)
+
+  NVDA:
+    Order-3 patterns: 6 observed (max 6)
+    Order-4 patterns: 24 observed (max 24)
+    Forbidden order-4 patterns: 0
+    Most common order-3: (1, 2, 0) = 0.173
+    Least common order-3: (0, 2, 1) = 0.161
+    Max deviation from uniform: 0.0060 (weak)
+    Most predictive transition: after (1, 0, 2) -> (0, 2, 1) (p=0.571)
+
+  QQQ:
+    Order-3 patterns: 6 observed (max 6)
+    Order-4 patterns: 24 observed (max 24)
+    Forbidden order-4 patterns: 0
+    Most common order-3: (2, 1, 0) = 0.179
+    Least common order-3: (0, 1, 2) = 0.133
+    Max deviation from uniform: 0.0337 (significant)
+    Most predictive transition: after (0, 1, 2) -> (1, 2, 0) (p=0.565)
+
+  SMCI:
+    Order-3 patterns: 6 observed (max 6)
+    Order-4 patterns: 24 observed (max 24)
+    Forbidden order-4 patterns: 0
+    Most common order-3: (2, 1, 0) = 0.189
+    Least common order-3: (1, 2, 0) = 0.154
+    Max deviation from uniform: 0.0222 (significant)
+    Most predictive transition: after (0, 2, 1) -> (2, 1, 0) (p=0.580)
+
+  SPY:
+    Order-3 patterns: 6 observed (max 6)
+    Order-4 patterns: 24 observed (max 24)
+    Forbidden order-4 patterns: 0
+    Most common order-3: (2, 1, 0) = 0.197
+    Least common order-3: (0, 1, 2) = 0.108
+    Max deviation from uniform: 0.0588 (significant)
+    Most predictive transition: after (0, 1, 2) -> (1, 2, 0) (p=0.625)
+
+==============================================================================
+  ANALYSIS 8: FRACTIONAL DIFFERENTIATION
+==============================================================================
+   AAPL: optimal d = 1.00, memory retention (corr with prices) = 0.089
+         d=0.0: ADF p=0.5000 (no), corr=1.000
+         d=0.2: ADF p=1.0000 (no), corr=nan
+         d=0.4: ADF p=1.0000 (no), corr=nan
+         d=0.6: ADF p=1.0000 (no), corr=nan
+         d=0.8: ADF p=0.5000 (no), corr=-0.127
+         d=1.0: ADF p=0.5000 (no), corr=0.089
+  GOOGL: optimal d = 1.00, memory retention (corr with prices) = 0.087
+         d=0.0: ADF p=0.5000 (no), corr=1.000
+         d=0.2: ADF p=1.0000 (no), corr=nan
+         d=0.4: ADF p=1.0000 (no), corr=nan
+         d=0.6: ADF p=1.0000 (no), corr=nan
+         d=0.8: ADF p=0.5000 (no), corr=0.188
+         d=1.0: ADF p=0.5000 (no), corr=0.087
+    IWM: optimal d = 1.00, memory retention (corr with prices) = 0.098
+         d=0.0: ADF p=0.5000 (no), corr=1.000
+         d=0.2: ADF p=1.0000 (no), corr=nan
+         d=0.4: ADF p=1.0000 (no), corr=nan
+         d=0.6: ADF p=1.0000 (no), corr=nan
+         d=0.8: ADF p=0.5000 (no), corr=0.243
+         d=1.0: ADF p=0.5000 (no), corr=0.098
+   NVDA: optimal d = 1.00, memory retention (corr with prices) = -0.057
+         d=0.0: ADF p=0.5000 (no), corr=1.000
+         d=0.2: ADF p=1.0000 (no), corr=nan
+         d=0.4: ADF p=1.0000 (no), corr=nan
+         d=0.6: ADF p=1.0000 (no), corr=nan
+         d=0.8: ADF p=0.5000 (no), corr=0.492
+         d=1.0: ADF p=0.5000 (no), corr=-0.057
+    QQQ: optimal d = 1.00, memory retention (corr with prices) = 0.045
+         d=0.0: ADF p=0.5000 (no), corr=1.000
+         d=0.2: ADF p=1.0000 (no), corr=nan
+         d=0.4: ADF p=1.0000 (no), corr=nan
+         d=0.6: ADF p=1.0000 (no), corr=nan
+         d=0.8: ADF p=0.5000 (no), corr=0.189
+         d=1.0: ADF p=0.5000 (no), corr=0.045
+   SMCI: optimal d = 1.00, memory retention (corr with prices) = 0.081
+         d=0.0: ADF p=0.5000 (no), corr=1.000
+         d=0.2: ADF p=1.0000 (no), corr=nan
+         d=0.4: ADF p=1.0000 (no), corr=nan
+         d=0.6: ADF p=1.0000 (no), corr=nan
+         d=0.8: ADF p=0.5000 (no), corr=0.285
+         d=1.0: ADF p=0.5000 (no), corr=0.081
+    SPY: optimal d = 1.00, memory retention (corr with prices) = 0.036
+         d=0.0: ADF p=0.5000 (no), corr=1.000
+         d=0.2: ADF p=1.0000 (no), corr=nan
+         d=0.4: ADF p=1.0000 (no), corr=nan
+         d=0.6: ADF p=1.0000 (no), corr=nan
+         d=0.8: ADF p=0.5000 (no), corr=0.205
+         d=1.0: ADF p=0.5000 (no), corr=0.036
+
+  KEY INSIGHT: Optimal d values
+    AAPL: d=1.00 -> MODERATE memory retention (0.089)
+    GOOGL: d=1.00 -> MODERATE memory retention (0.087)
+    IWM: d=1.00 -> MODERATE memory retention (0.098)
+    NVDA: d=1.00 -> MODERATE memory retention (-0.057)
+    QQQ: d=1.00 -> MODERATE memory retention (0.045)
+    SMCI: d=1.00 -> MODERATE memory retention (0.081)
+    SPY: d=1.00 -> MODERATE memory retention (0.036)
+
+==============================================================================
+  ANALYSIS 9: CROSS-SECTIONAL INTRADAY MOMENTUM
+==============================================================================
+  Cross-Sectional Intraday Momentum (7 symbols, 252 days):
+    Winner rest-of-day:  +0.0452%
+    Loser rest-of-day:   +0.0657%
+    Winner-Loser spread: -0.0205% (std=3.1348%)
+    Spread Sharpe:       -0.104
+    Continuation rate:   47.2%
+    -> NEUTRAL: No clear cross-sectional pattern
+
+==============================================================================
+  DISCOVERY SUMMARY
+==============================================================================
+  Total analyses run: 9
+  Total runtime: 7.9s
+
+  ACTIONABLE EDGES IDENTIFIED:
+  ============================================================
+
+  Edge 1: CROSS-ASSET LEAD-LAG
+    21 pairs with |corr| > 0.025
+    -> Build LeadLagArbitrage strategy
+
+  Edge 2: ENTROPY FILTER (SMCI)
+    Low entropy Sharpe: +0.03 vs High: -1.21
+    -> Build EntropyRegimeFilter to gate all strategies
+
+  Edge 3: HURST-ADAPTIVE EXECUTION (AAPL)
+    1.0% MR + 81.4% MOM = 82.4% tradeable
+    -> Build HurstAdaptive strategy
+
+  Edge 4: TIME-OF-DAY ADAPTIVE EXECUTION
+    Morning momentum, midday reversion, afternoon momentum
+    -> Build IntradayTimeAdaptive strategy
+
+  Total edges: 4
+==============================================================================

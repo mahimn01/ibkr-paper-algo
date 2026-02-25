@@ -67,6 +67,9 @@ class ControllerConfig:
         "CrossAssetDivergence": StrategyAllocation(weight=0.10, max_positions=4),
         "FlowPressure": StrategyAllocation(weight=0.10, max_positions=6),
         "LiquidityCycles": StrategyAllocation(weight=0.10, max_positions=5),
+        "LeadLagArbitrage": StrategyAllocation(weight=0.08, max_positions=4),
+        "HurstAdaptive": StrategyAllocation(weight=0.08, max_positions=6),
+        "TimeAdaptive": StrategyAllocation(weight=0.06, max_positions=4),
     })
 
     # ── Portfolio-level limits ──────────────────────────────────────────
@@ -125,6 +128,12 @@ class ControllerConfig:
     vol_lookback: int = 20
     """Number of daily returns for realized vol estimate."""
 
+    # ── Entropy filter ────────────────────────────────────────────────
+    enable_entropy_filter: bool = False
+    """When True, scale entry signals by market entropy.
+    Low entropy (predictable) → full signal, high entropy (random) → near-block.
+    Based on sample entropy of reference symbol returns."""
+
 
 # ────────────────────────────────────────────────────────────────────────────
 # Controller
@@ -170,6 +179,22 @@ class MultiStrategyController:
         self._regime_weights: Dict[str, Dict[str, float]] = {}
         self._price_history_for_regime: List[float] = []  # SPY-like proxy
         self._hmm_model = None  # Lazy-loaded
+
+        # Entropy filter (Phase 6)
+        self._entropy_filter = None
+        self._entropy_ref_symbol: str = "SPY"
+        self._entropy_last_day: Optional[str] = None
+        self._entropy_day_open: Optional[float] = None
+        self._entropy_day_close: Optional[float] = None
+        if self.config.enable_entropy_filter:
+            try:
+                from trading_algo.quant_core.strategies.entropy_regime_filter import (
+                    EntropyRegimeFilter,
+                )
+                self._entropy_filter = EntropyRegimeFilter()
+                self._entropy_ref_symbol = self._entropy_filter._config.reference_symbol
+            except ImportError:
+                logger.warning("Entropy filter requested but module not available")
 
     # ── Registration ────────────────────────────────────────────────────
 
@@ -218,6 +243,23 @@ class MultiStrategyController:
             except Exception as e:
                 logger.error("Error updating %s with %s: %s", strategy.name, symbol, e)
 
+        # Feed entropy filter with reference symbol daily returns
+        if self._entropy_filter is not None and symbol == self._entropy_ref_symbol:
+            day_str = timestamp.strftime("%Y-%m-%d")
+            if self._entropy_last_day != day_str:
+                # New trading day — compute prior day's return and feed it
+                if (
+                    self._entropy_last_day is not None
+                    and self._entropy_day_open is not None
+                    and self._entropy_day_close is not None
+                    and self._entropy_day_open > 0
+                ):
+                    daily_ret = (self._entropy_day_close / self._entropy_day_open) - 1.0
+                    self._entropy_filter.update(daily_ret)
+                self._entropy_last_day = day_str
+                self._entropy_day_open = open_price
+            self._entropy_day_close = close
+
     # ── Signal generation pipeline ──────────────────────────────────────
 
     def generate_signals(
@@ -253,8 +295,11 @@ class MultiStrategyController:
         if not raw_signals:
             return []
 
+        # Step 1.5 — entropy filter (scale entries by market predictability)
+        filtered = self._apply_entropy_filter(raw_signals)
+
         # Step 2 — scale by allocation weight
-        scaled = self._apply_allocation_weights(raw_signals)
+        scaled = self._apply_allocation_weights(filtered)
 
         # Step 3 — resolve conflicts (same symbol, different strategies)
         resolved = self._resolve_conflicts(scaled)
@@ -295,6 +340,50 @@ class MultiStrategyController:
             all_signals.extend(sigs)
 
         return all_signals
+
+    # ── Step 1.5: Entropy filter ───────────────────────────────────────
+
+    def _apply_entropy_filter(
+        self,
+        signals: List[StrategySignal],
+    ) -> List[StrategySignal]:
+        """
+        Scale entry signals by market entropy regime.
+
+        Low entropy (predictable) → full passthrough.
+        High entropy (random) → near-block on entries (10% scaling).
+        Exit signals always pass through unscaled.
+        """
+        if self._entropy_filter is None:
+            return signals
+
+        scale = self._entropy_filter.get_scaling_factor()
+
+        # No meaningful reduction — skip the copy
+        if scale >= 0.99:
+            return signals
+
+        regime = self._entropy_filter.get_entropy_regime()
+        logger.debug(
+            "Entropy filter: regime=%s scale=%.2f (entropy=%.4f)",
+            regime, scale, self._entropy_filter.get_current_entropy(),
+        )
+
+        return [
+            StrategySignal(
+                strategy_name=s.strategy_name,
+                symbol=s.symbol,
+                direction=s.direction,
+                target_weight=s.target_weight * scale if s.is_entry else s.target_weight,
+                confidence=s.confidence,
+                stop_loss=s.stop_loss,
+                take_profit=s.take_profit,
+                entry_price=s.entry_price,
+                trade_type=s.trade_type,
+                metadata={**s.metadata, "entropy_scale": scale, "entropy_regime": regime},
+            )
+            for s in signals
+        ]
 
     # ── Step 2: Allocation weighting ────────────────────────────────────
 
