@@ -1,0 +1,2 @@
+window,is_start,is_end,oos_start,oos_end,IS_sharpe,OOS_sharpe,ratio,IS_ret,OOS_ret,error
+0,2024-01-02,2026-01-08,2026-01-08,2026-01-30,2.0267,-3.0642,-1.5119,0.478005,-0.000944,

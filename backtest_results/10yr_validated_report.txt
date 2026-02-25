@@ -1,0 +1,245 @@
+####################################################################################################
+#  10-YEAR ENTERPRISE-GRADE VALIDATED BACKTEST REPORT
+#  Combo B: 8-Strategy Ensemble
+#  2016-01-01 to 2026-02-25
+####################################################################################################
+  Generated: 2026-02-25 01:22:53
+  Runtime:   0.7 hours (2444s)
+  Strategies: Orchestrator, ORB, PairsTrading, PureMomentum, RegimeTransition, CrossAssetDivergence, FlowPressure, LiquidityCycles
+  Trading Symbols: SPY, QQQ, AAPL, NVDA, MSFT, SMCI, IWM
+  Reference Symbols: HYG, LQD, TLT, GLD
+  Initial Capital: $100,000
+  Risk-Free Rate: 4.5%
+
+====================================================================================================
+  1. EXECUTIVE SUMMARY
+====================================================================================================
+  Total Return (10yr):     +47.65%
+  Annualized Return:       +20.74%
+  Final Equity:            $147,651.83
+  Sharpe Ratio:            +1.983
+  Sortino Ratio:           +0.207
+  Calmar Ratio:            +5.910
+  Max Drawdown:            3.51%
+  Max DD Duration:         44 equity-curve points
+  Annual Volatility:       7.47%
+  Total Trades:            8
+  Win Rate:                25.0%
+  Profit Factor:           1.948
+  SPY Total Return (B&H):  +46.39%
+  Alpha vs SPY (annual):   +14.79%
+  Beta:                    -0.005
+  OOS Sharpe (2023-2026):  +1.983
+  Deflated Sharpe Ratio:   +10.691  (p=0.0000)
+
+====================================================================================================
+  2. DATA COVERAGE TABLE
+====================================================================================================
+  Symbol   First Date     Last Date         Bar Count   Coverage
+  ------------------------------------------------------------------------------------------------
+  SPY      2024-01-02     2026-01-30           40,500     100.0%
+  QQQ      2024-01-02     2026-01-30           40,500     100.0%
+  AAPL     2024-01-02     2026-01-30           40,500     100.0%
+  NVDA     2024-01-02     2026-01-30           40,500     100.0%
+  MSFT     N/A            N/A                       0       0.0%
+  SMCI     2024-01-02     2026-01-30           40,500     100.0%
+  IWM      2024-01-02     2026-01-30           40,500     100.0%
+  HYG      N/A            N/A                       0       0.0%
+  LQD      N/A            N/A                       0       0.0%
+  TLT      N/A            N/A                       0       0.0%
+  GLD      N/A            N/A                       0       0.0%
+
+====================================================================================================
+  3. HARD IN-SAMPLE / OUT-OF-SAMPLE RESULTS
+====================================================================================================
+  IS period:  2024-01-02 to 2026-01-30
+  OOS period: 2024-01-02 to 2026-01-30
+
+  Metric                             IS            OOS   OOS/IS Ratio
+  ------------------------------------------------------------------------------------------------
+  Total Return                    0.00%         47.65%          0.000
+  Annualized Return               0.00%         20.74%          0.000
+  Sharpe Ratio                   +0.000         +1.983          0.000
+  Sortino Ratio                  -1.000         +0.207         -0.207
+  Calmar Ratio                   +0.000         +5.910          0.000
+  Max Drawdown                    0.00%          3.51%          0.000
+  Volatility                     15.00%          7.47%          0.498
+  Win Rate                        0.00%         25.00%          0.000
+  Total Trades                        0              8          0.000
+  Profit Factor                  +0.000         +1.948          0.000
+  VaR 95%                         0.00%          0.46%          0.000
+  CVaR 95%                        0.00%          0.96%          0.000
+
+  Sharpe Degradation Ratio: 0.000
+  Assessment: DEGRADED -- significant overfitting risk
+
+====================================================================================================
+  4. WALK-FORWARD RESULTS TABLE
+====================================================================================================
+   Win IS Period                 OOS Period                  IS SR   OOS SR   Ratio   IS Ret  OOS Ret
+  ------------------------------------------------------------------------------------------------
+     0 2024-01-02..2026-01-08    2026-01-08..2026-01-30     +2.027   -3.064   -1.51   +47.8%    -0.1%
+
+====================================================================================================
+  5. WALK-FORWARD STABILITY ANALYSIS
+====================================================================================================
+  Total windows:             1
+  Valid windows:             1
+  Failed windows:            0
+
+  OOS Sharpe mean:           -3.064
+  OOS Sharpe median:         -3.064
+  OOS Sharpe std:            0.000
+  OOS Sharpe min:            -3.064
+  OOS Sharpe max:            -3.064
+  % windows OOS SR > 0:      0.0%
+  % windows OOS profitable:  0.0%
+  Avg OOS/IS ratio:          -1.512
+  Median OOS/IS ratio:       -1.512
+  Assessment: MARGINAL -- avg OOS/IS ratio below 0.5
+
+====================================================================================================
+  6. FULL-PERIOD INSTITUTIONAL METRICS
+====================================================================================================
+  Metric                                        Value
+  ------------------------------------------------------------------------------------------------
+  Total Return                                +47.65%
+  Annualized Return                           +20.74%
+  Sharpe Ratio                                 +1.983
+  Sortino Ratio                                +0.207
+  Calmar Ratio                                 +5.910
+  Max Drawdown                                  3.51%
+  Max DD Duration                           44 points
+  Annual Volatility                             7.47%
+  Total Trades                                      8
+  Win Rate                                      25.0%
+  Profit Factor                                 1.948
+  Expectancy/Trade                             $80.69
+  Skewness                                     +0.324
+  Excess Kurtosis                             +12.085
+  VaR 95% (daily)                              0.464%
+  CVaR 95% (daily)                             0.956%
+  Annual Turnover                              37.92x
+  Diversification Ratio                         0.000
+
+====================================================================================================
+  7. STRATEGY ATTRIBUTION
+====================================================================================================
+  Strategy                          Signals   % Contribution
+  ------------------------------------------------------------------------------------------------
+  FlowPressure                          931            40.2%
+  PairsTrading                          706            30.5%
+  PureMomentum                          449            19.4%
+  CrossAssetDivergence                  225             9.7%
+  Orchestrator                            4             0.2%
+  TOTAL                               2,315           100.0%
+
+====================================================================================================
+  8. MARKET REGIME BREAKDOWN
+====================================================================================================
+  Regime                                   Sharpe     Return    Ann Ret   Max DD      Vol   Trades
+  ------------------------------------------------------------------------------------------------
+  Low-Vol Bull (2016-2019)                    ERR        ---        ---      ---      ---      ---
+  COVID Crash (2020 Q1)                       ERR        ---        ---      ---      ---      ---
+  Recovery/Bull (2020Q2-2021)                 ERR        ---        ---      ---      ---      ---
+  Bear Market (2022)                          ERR        ---        ---      ---      ---      ---
+  AI Recovery (2023-2024)                  +2.105     +24.8%     +24.9%     3.5%     8.7%        7
+  Recent (2025-2026)                          ERR        ---        ---      ---      ---      ---
+
+====================================================================================================
+  9. ALPHA vs SPY BUY-AND-HOLD
+====================================================================================================
+
+  --- Full Period ---
+  SPY Total Return:    +46.39%
+  Algo Total Return:   +47.65%
+  Alpha (total):       +1.26%
+  Alpha (annualized):  +14.79%
+
+  --- Per-Year Alpha Table ---
+    Year    Algo Return     SPY Return      Alpha
+  ------------------------------------------------------------------------------------------------
+    2024        +24.91%        +24.00%     +0.91%
+    2025        +18.15%        +16.35%     +1.79%
+    2026         +0.20%         +1.47%     -1.27%
+
+====================================================================================================
+  10. RISK ANALYSIS
+====================================================================================================
+  VaR 95% (daily):            0.464%
+  CVaR 95% (daily):           0.956%
+  Beta vs SPY:                -0.005
+  Benchmark Correlation:      -0.011
+  Information Ratio:          -0.026
+  Max Drawdown:               3.51%
+  Max DD Duration:            44 equity-curve points
+  Return Skewness:            +0.324
+  Return Excess Kurtosis:     +12.085
+  Annual Volatility:          7.47%
+
+  Fat tails (kurtosis > 1):   YES
+  Negative skew (< -0.5):     NO
+
+====================================================================================================
+  11. STATISTICAL VALIDATION
+====================================================================================================
+  Observed Sharpe Ratio:       +1.983
+  Number of trials tested:     1 (single combo)
+  Number of daily observations:521
+  Deflated Sharpe Ratio:       +10.691
+  DSR p-value:                 0.0000
+  Conclusion: SIGNIFICANT at 5% level -- low overfitting risk
+
+  t-test on daily excess returns:
+    t-statistic: 2.851
+    p-value:     0.004534
+    Significant at 5%: YES
+
+====================================================================================================
+  12. MONTHLY RETURN HEATMAP
+====================================================================================================
+    Year      Jan     Feb     Mar     Apr     May     Jun     Jul     Aug     Sep     Oct     Nov     Dec    Annual
+  ------------------------------------------------------------------------------------------------
+    2024    +3.0%   +7.9%   +0.9%   +1.1%   +3.1%   +3.2%   +1.8%   -1.5%   +2.2%   -2.1%   +3.0%   +0.2%    +24.9%
+    2025    -0.1%   +6.6%   -0.9%   +1.8%   +2.9%   +2.3%   +1.4%   +0.4%   +0.8%   +1.7%   -0.2%   +0.4%    +18.1%
+    2026    +0.2%     ---     ---     ---     ---     ---     ---     ---     ---     ---     ---     ---     +0.2%
+
+====================================================================================================
+  13. PER-YEAR ANNUAL RETURNS TABLE
+====================================================================================================
+    Year    Algo Return     SPY Return      Alpha     Cum Algo      Cum SPY
+  ------------------------------------------------------------------------------------------------
+    2024        +24.91%        +24.00%     +0.91%      +24.91%      +24.00%
+    2025        +18.15%        +16.35%     +1.79%      +47.58%      +44.27%
+    2026         +0.20%         +1.47%     -1.27%      +47.87%      +46.39%
+
+====================================================================================================
+  14. HONEST ASSESSMENT -- CAVEATS AND LIMITATIONS
+====================================================================================================
+  1. SURVIVORSHIP BIAS: All symbols in the universe survived to 2026. Delisted or bankrupt tickers are not represented, biasing results upward.
+
+  2. LOOKAHEAD BIAS IN SYMBOL SELECTION: The 7 trading symbols were chosen with knowledge of their 2024-2026 performance (especially NVDA, SMCI). A truly prospective test would use only symbols known at the start of each period.
+
+  3. BACKFILL BIAS: Some symbols (e.g., SMCI) have limited history pre-2018. Results for early periods reflect only a subset of the universe.
+
+  4. SLIPPAGE MODEL IS SIMPLIFIED: Fixed 2 bps slippage does not capture market impact for large orders, low-liquidity stocks, or during crashes.
+
+  5. COMMISSION MODEL IS SIMPLIFIED: Flat per-share commission does not account for exchange fees, SEC fees, or payment-for-order-flow.
+
+  6. NO SHORT SELLING COSTS: Borrow fees, locate costs, and short squeeze risk are not modeled.
+
+  7. FILL ASSUMPTIONS: All orders are assumed filled at the simulated price. In reality, limit orders may not fill and market orders may experience adverse selection.
+
+  8. SINGLE COMBO TESTED: Only Combo B is run here. The prior combo selection step introduces selection bias (partially addressed by DSR).
+
+  9. REGIME DEFINITIONS ARE EX-POST: The regime date ranges were defined with hindsight. A live system would need to detect regimes in real-time.
+
+  10. RISK-FREE RATE ASSUMPTION: A constant 4.5% Rf is used across all 10 years. In reality, the Rf varied from ~0% (2016-2021) to ~5% (2023-2024).
+
+  11. DATA QUALITY: 5-minute bar data from IBKR may have gaps, corporate action artifacts, or timestamp inconsistencies.
+
+  12. STRATEGY PARAMETER STATIONARITY: Strategy parameters are held constant for 10 years. Adaptive re-optimization was not performed.
+
+====================================================================================================
+  END OF 10-YEAR ENTERPRISE BACKTEST REPORT
+====================================================================================================

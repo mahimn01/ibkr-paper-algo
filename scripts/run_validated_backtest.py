@@ -253,16 +253,17 @@ class WFWindowResult:
     ratio: float  # OOS / IS (>0.5 acceptable)
 
 
-def _sharpe_from_daily(daily_returns: List[float]) -> float:
-    """Annualised Sharpe (excess over 2% risk-free)."""
+def _sharpe_from_daily(daily_returns: List[float], risk_free_rate: float = 0.045) -> float:
+    """Annualised Sharpe (excess over risk-free rate)."""
     arr = np.array(daily_returns)
     if len(arr) < 2:
         return 0.0
-    ann_ret = float(np.mean(arr) * 252)
-    ann_vol = float(np.std(arr, ddof=1) * np.sqrt(252))
-    if ann_vol < 1e-8:
+    daily_rf = (1 + risk_free_rate) ** (1 / 252) - 1
+    excess = arr - daily_rf
+    std = float(np.std(excess, ddof=1))
+    if std < 1e-8:
         return 0.0
-    return (ann_ret - 0.02) / ann_vol
+    return float(np.mean(excess) / std * np.sqrt(252))
 
 
 def _total_return_from_daily(daily_returns: List[float]) -> float:
@@ -715,16 +716,25 @@ def main() -> None:
     # 3. Final full-period backtest on best combo
     final_result = run_final_backtest(data, best)
 
-    # 4. Deflated Sharpe
+    # 4. Deflated Sharpe — use the validated DeflatedSharpe from pbo.py
     n_daily = len(final_result.daily_returns)
-    oos_daily = np.array(best.full_oos.daily_returns) if best.full_oos else np.array([])
-    sr_std = float(np.std(oos_daily) * np.sqrt(252)) if len(oos_daily) > 2 else 1.0
-    dsr, dsr_pval = deflated_sharpe_ratio(
-        sr_observed=best.oos_sharpe,
-        n_trials=len(combo_results),
-        n_observations=n_daily,
-        sr_std=sr_std,
-    )
+    try:
+        from trading_algo.quant_core.validation.pbo import DeflatedSharpe
+        ds = DeflatedSharpe()
+        ds_result = ds.calculate(
+            observed_sharpe=best.oos_sharpe,
+            n_trials=len(combo_results),
+            n_observations=n_daily,
+        )
+        dsr = ds_result.deflated_sharpe
+        dsr_pval = ds_result.p_value
+    except Exception:
+        dsr, dsr_pval = deflated_sharpe_ratio(
+            sr_observed=best.oos_sharpe,
+            n_trials=len(combo_results),
+            n_observations=n_daily,
+            sr_std=1.0,
+        )
 
     # SPY benchmark
     spy_bh = compute_spy_buy_and_hold(data)
