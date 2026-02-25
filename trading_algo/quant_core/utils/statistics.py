@@ -118,17 +118,15 @@ def sortino_ratio(
     excess_returns = returns - daily_rf
     mean_excess = np.mean(excess_returns)
 
-    # Downside deviation
-    downside_returns = returns[returns < target_return]
-    if len(downside_returns) < 2:
+    # Downside deviation: sqrt(mean(min(r - target, 0)^2)) over ALL observations
+    # This is the correct semi-deviation, NOT std of only negative returns
+    downside_diff = np.minimum(returns - target_return, 0.0)
+    downside_dev = np.sqrt(np.mean(downside_diff ** 2))
+
+    if downside_dev < EPSILON:
         return float('inf') if mean_excess > 0 else 0.0
 
-    downside_std = np.std(downside_returns, ddof=1)
-
-    if downside_std < EPSILON:
-        return float('inf') if mean_excess > 0 else 0.0
-
-    sortino = mean_excess / downside_std
+    sortino = mean_excess / downside_dev
 
     if annualize:
         sortino *= SQRT_252

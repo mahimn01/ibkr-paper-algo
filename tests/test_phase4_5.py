@@ -268,12 +268,18 @@ class TestBacktestRunner:
         # Manually set some state to test _build_results
         runner._equity_curve = [100_000, 101_000, 102_000, 101_500]
         runner._daily_returns = [0.01, 0.0099, -0.0049]
-        runner._trades = [{"side": "BUY"}, {"side": "SELL"}, {"side": "BUY"}]
+        runner._trades = [
+            {"side": "BUY", "symbol": "AAPL", "shares": 10, "price": 100.0, "strategy": "Mom"},
+            {"side": "SELL", "symbol": "AAPL", "shares": -10, "price": 102.0, "strategy": "exit"},
+            {"side": "BUY", "symbol": "AAPL", "shares": 5, "price": 101.0, "strategy": "Mom"},
+        ]
+        runner._closed_trades = 2  # 2 round-trip trades (SELL = close)
+        runner._winning_trades = 1
         runner._signals_by_strategy = {"Momentum": 5, "ORB": 3}
 
         results = runner._build_results()
         assert results.total_return > 0
-        assert results.total_trades == 3
+        assert results.total_trades == 2  # closed trades, not raw events
         assert "Momentum" in results.strategy_attribution
         assert results.strategy_attribution["Momentum"].n_signals == 5
         assert len(results.equity_curve) == 4

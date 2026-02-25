@@ -188,12 +188,13 @@ class WalkForwardValidator:
         )
 
     @staticmethod
-    def _compute_sharpe(returns: np.ndarray) -> float:
+    def _compute_sharpe(returns: np.ndarray, risk_free_rate: float = 0.045) -> float:
         """Annualized Sharpe ratio from daily returns."""
         if len(returns) < 2:
             return 0.0
-        ann_ret = float(np.mean(returns) * 252)
-        ann_vol = float(np.std(returns, ddof=1) * np.sqrt(252))
-        if ann_vol < 1e-8:
+        daily_rf = (1 + risk_free_rate) ** (1 / 252) - 1
+        excess = returns - daily_rf
+        std = float(np.std(excess, ddof=1))
+        if std < 1e-8:
             return 0.0
-        return (ann_ret - 0.02) / ann_vol
+        return float(np.mean(excess) / std * np.sqrt(252))

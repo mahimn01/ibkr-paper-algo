@@ -34,6 +34,7 @@ class MultiStrategyBacktestConfig:
     end_date: Optional[date] = None
     commission_per_share: float = 0.0035
     slippage_bps: float = 2.0
+    risk_free_rate: float = 0.045  # Annual risk-free rate (current ~4.5%)
 
 
 @dataclass
@@ -59,6 +60,23 @@ class MultiStrategyBacktestResults:
     volatility: float = 0.0
     total_trades: int = 0
     win_rate: float = 0.0
+
+    # Institutional-quality metrics
+    calmar_ratio: float = 0.0
+    profit_factor: float = 0.0
+    expectancy_per_trade: float = 0.0
+    skewness: float = 0.0
+    kurtosis: float = 0.0
+    var_95: float = 0.0
+    cvar_95: float = 0.0
+    max_drawdown_duration_days: int = 0
+    annual_turnover: float = 0.0
+
+    # Benchmark-relative metrics
+    beta: float = 0.0
+    alpha_annual: float = 0.0
+    information_ratio: float = 0.0
+    benchmark_correlation: float = 0.0
 
     # Equity curve
     equity_curve: List[float] = field(default_factory=list)
@@ -336,8 +354,17 @@ class MultiStrategyBacktestRunner:
         )
         self._equity = self._cash + pos_value
 
-    def _build_results(self) -> MultiStrategyBacktestResults:
-        """Compute final metrics and build results."""
+    def _build_results(
+        self,
+        benchmark_daily_returns: Optional[np.ndarray] = None,
+    ) -> MultiStrategyBacktestResults:
+        """Compute final metrics and build results.
+
+        Args:
+            benchmark_daily_returns: Optional array of benchmark (e.g. SPY)
+                daily returns aligned to the same dates as portfolio returns.
+                Used for beta, alpha, information ratio, and correlation.
+        """
         ec = np.array(self._equity_curve) if self._equity_curve else np.array([self.config.initial_capital])
         dr = np.array(self._daily_returns) if self._daily_returns else np.array([0.0])
 
@@ -345,23 +372,128 @@ class MultiStrategyBacktestRunner:
         n_years = max(len(dr) / 252, 1 / 252)
         ann_return = (1 + total_return) ** (1 / n_years) - 1
 
-        vol = float(np.std(dr) * np.sqrt(252)) if len(dr) > 1 else 0.15
-        sharpe = (ann_return - 0.02) / vol if vol > 0 else 0
+        # Annualized volatility (ddof=1 for unbiased estimator)
+        vol = float(np.std(dr, ddof=1) * np.sqrt(252)) if len(dr) > 1 else 0.15
 
-        # Sortino
-        downside = dr[dr < 0]
-        downside_vol = float(np.std(downside) * np.sqrt(252)) if len(downside) > 1 else vol
-        sortino = (ann_return - 0.02) / downside_vol if downside_vol > 0 else 0
+        # Sharpe ratio: (mean_daily_excess / std_daily) * sqrt(252)
+        rf = self.config.risk_free_rate
+        daily_rf = (1 + rf) ** (1 / 252) - 1
+        excess = dr - daily_rf
+        if len(dr) > 1 and np.std(excess, ddof=1) > 1e-10:
+            sharpe = float(np.mean(excess) / np.std(excess, ddof=1) * np.sqrt(252))
+        else:
+            sharpe = 0.0
+
+        # Sortino ratio: use correct semi-deviation over ALL observations
+        # semi_dev = sqrt(mean(min(r - target, 0)^2)) * sqrt(252)
+        downside_diff = np.minimum(dr - daily_rf, 0.0)
+        downside_dev = float(np.sqrt(np.mean(downside_diff ** 2)) * np.sqrt(252))
+        if downside_dev > 1e-10:
+            sortino = float(np.mean(excess) * np.sqrt(252) / downside_dev)
+        else:
+            sortino = 0.0
 
         # Max drawdown
         peak = np.maximum.accumulate(ec)
         dd = (peak - ec) / np.where(peak > 0, peak, 1)
         max_dd = float(np.max(dd))
 
-        # Win rate from closed trades
-        total_trades = len(self._trades)
+        # Win rate from closed trades (not len(self._trades) which double-counts)
+        total_trades = self._closed_trades
         win_rate = (self._winning_trades / self._closed_trades
                     if self._closed_trades > 0 else 0.0)
+
+        # --- Institutional-quality metrics ---
+
+        # Calmar ratio: annualized return / max drawdown
+        calmar = ann_return / max_dd if max_dd > 1e-10 else 0.0
+
+        # Max drawdown duration (days in drawdown)
+        dd_duration = 0
+        max_dd_duration = 0
+        for d in dd:
+            if d > 0:
+                dd_duration += 1
+                max_dd_duration = max(max_dd_duration, dd_duration)
+            else:
+                dd_duration = 0
+
+        # VaR and CVaR (95%)
+        if len(dr) >= 10:
+            var_95 = float(-np.percentile(dr, 5))
+            tail = dr[dr <= np.percentile(dr, 5)]
+            cvar_95 = float(-np.mean(tail)) if len(tail) > 0 else var_95
+        else:
+            var_95 = 0.0
+            cvar_95 = 0.0
+
+        # Skewness and kurtosis
+        if len(dr) > 2:
+            mean_dr = np.mean(dr)
+            std_dr = np.std(dr, ddof=1)
+            if std_dr > 1e-10:
+                skewness = float(np.mean(((dr - mean_dr) / std_dr) ** 3))
+                kurtosis = float(np.mean(((dr - mean_dr) / std_dr) ** 4) - 3)
+            else:
+                skewness = 0.0
+                kurtosis = 0.0
+        else:
+            skewness = 0.0
+            kurtosis = 0.0
+
+        # Profit factor and expectancy from trade PnLs
+        trade_pnls = self._compute_trade_pnls()
+        if len(trade_pnls) > 0:
+            wins = trade_pnls[trade_pnls > 0]
+            losses = trade_pnls[trade_pnls < 0]
+            total_wins = float(np.sum(wins)) if len(wins) > 0 else 0.0
+            total_losses = abs(float(np.sum(losses))) if len(losses) > 0 else 0.0
+            profit_factor = total_wins / total_losses if total_losses > 1e-10 else 0.0
+            expectancy = float(np.mean(trade_pnls))
+        else:
+            profit_factor = 0.0
+            expectancy = 0.0
+
+        # Annual turnover: sum(|delta_shares * price|) / avg_equity / n_years
+        total_traded_value = sum(
+            abs(t["shares"] * t["price"]) for t in self._trades
+        )
+        avg_equity = float(np.mean(ec)) if len(ec) > 0 else self.config.initial_capital
+        annual_turnover = (total_traded_value / avg_equity / n_years) if avg_equity > 0 and n_years > 0 else 0.0
+
+        # --- Benchmark-relative metrics ---
+        beta = 0.0
+        alpha_annual = 0.0
+        information_ratio = 0.0
+        benchmark_corr = 0.0
+
+        if benchmark_daily_returns is not None and len(benchmark_daily_returns) >= 10:
+            bench = benchmark_daily_returns
+            # Align lengths
+            min_len = min(len(dr), len(bench))
+            algo_r = dr[:min_len]
+            bench_r = bench[:min_len]
+
+            # Beta = Cov(algo, bench) / Var(bench)
+            cov_matrix = np.cov(algo_r, bench_r)
+            var_bench = cov_matrix[1, 1]
+            if var_bench > 1e-10:
+                beta = float(cov_matrix[0, 1] / var_bench)
+
+            # Jensen's alpha: algo_ann - rf - beta * (bench_ann - rf)
+            bench_ann = float(np.mean(bench_r) * 252)
+            algo_ann = float(np.mean(algo_r) * 252)
+            alpha_annual = algo_ann - rf - beta * (bench_ann - rf)
+
+            # Information ratio: (algo - bench) / tracking_error
+            active_returns = algo_r - bench_r
+            tracking_error = float(np.std(active_returns, ddof=1) * np.sqrt(252))
+            if tracking_error > 1e-10:
+                information_ratio = float(np.mean(active_returns) * 252 / tracking_error)
+
+            # Correlation
+            corr = np.corrcoef(algo_r, bench_r)
+            benchmark_corr = float(corr[0, 1]) if not np.isnan(corr[0, 1]) else 0.0
 
         # Per-strategy attribution
         attribution = {}
@@ -380,8 +512,50 @@ class MultiStrategyBacktestRunner:
             volatility=vol,
             total_trades=total_trades,
             win_rate=win_rate,
+            calmar_ratio=calmar,
+            profit_factor=profit_factor,
+            expectancy_per_trade=expectancy,
+            skewness=skewness,
+            kurtosis=kurtosis,
+            var_95=var_95,
+            cvar_95=cvar_95,
+            max_drawdown_duration_days=max_dd_duration,
+            annual_turnover=annual_turnover,
+            beta=beta,
+            alpha_annual=alpha_annual,
+            information_ratio=information_ratio,
+            benchmark_correlation=benchmark_corr,
             equity_curve=ec.tolist(),
             daily_returns=dr.tolist(),
             timestamps=self._timestamps,
             strategy_attribution=attribution,
         )
+
+    def _compute_trade_pnls(self) -> np.ndarray:
+        """Extract per-trade P&L from the trade log.
+
+        Pairs consecutive BUY/SELL events for the same symbol into
+        round-trip P&L values.
+        """
+        # Match open/close pairs by symbol
+        open_trades: Dict[str, List[Dict]] = {}
+        pnls: List[float] = []
+
+        for t in self._trades:
+            sym = t["symbol"]
+            if t["side"] in ("BUY", "SHORT"):
+                open_trades.setdefault(sym, []).append(t)
+            elif t["side"] in ("SELL", "COVER"):
+                opens = open_trades.get(sym, [])
+                if opens:
+                    entry = opens.pop(0)
+                    entry_price = entry["price"]
+                    exit_price = t["price"]
+                    shares = abs(entry["shares"])
+                    if entry["side"] == "BUY":
+                        pnl = (exit_price - entry_price) * shares
+                    else:
+                        pnl = (entry_price - exit_price) * shares
+                    pnls.append(pnl)
+
+        return np.array(pnls) if pnls else np.array([])
