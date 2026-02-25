@@ -810,3 +810,122 @@ class TestIntegration:
         directions = {s.symbol: s.direction for s in result}
         assert directions["AAPL"] == 1
         assert directions["MSFT"] == -1
+
+
+# ────────────────────────────────────────────────────────────────────────
+# Entropy filter integration tests
+# ────────────────────────────────────────────────────────────────────────
+
+class TestEntropyFilter:
+    def test_entropy_filter_disabled_by_default(self):
+        ctrl = MultiStrategyController()
+        assert ctrl._entropy_filter is None
+
+    def test_entropy_filter_enabled(self):
+        cfg = ControllerConfig(enable_entropy_filter=True)
+        ctrl = MultiStrategyController(cfg)
+        assert ctrl._entropy_filter is not None
+        assert ctrl._entropy_ref_symbol == "SPY"
+
+    def test_entropy_passthrough_when_disabled(self):
+        cfg = ControllerConfig(
+            allocations={"A": StrategyAllocation(weight=1.0)},
+            enable_entropy_filter=False,
+        )
+        ctrl = MultiStrategyController(cfg)
+        sig = StrategySignal(
+            strategy_name="A", symbol="AAPL", direction=1,
+            target_weight=0.10, confidence=0.8,
+        )
+        ctrl.register(StubStrategy("A", signals=[sig]))
+        result = ctrl.generate_signals(["AAPL"], datetime.now())
+        entries = [s for s in result if s.is_entry]
+        assert len(entries) == 1
+        # Weight only scaled by allocation (1.0), not entropy
+        assert entries[0].target_weight == pytest.approx(0.10)
+
+    def test_entropy_filter_scales_entries(self):
+        """When entropy filter is enabled and warmed up, entries get scaled."""
+        cfg = ControllerConfig(
+            allocations={"A": StrategyAllocation(weight=1.0)},
+            enable_entropy_filter=True,
+            enable_vol_management=False,
+        )
+        ctrl = MultiStrategyController(cfg)
+
+        # Manually set the filter to high-entropy regime (scale=0.10)
+        ctrl._entropy_filter._current_scale = 0.10
+        ctrl._entropy_filter._current_regime = "HIGH"
+        ctrl._entropy_filter._n_updates = 100  # Past warmup
+
+        sig = StrategySignal(
+            strategy_name="A", symbol="AAPL", direction=1,
+            target_weight=0.10, confidence=0.8,
+        )
+        ctrl.register(StubStrategy("A", signals=[sig]))
+        result = ctrl.generate_signals(["AAPL"], datetime.now())
+
+        entries = [s for s in result if s.is_entry]
+        assert len(entries) == 1
+        # Weight should be scaled: 0.10 * 1.0 (alloc) * 0.10 (entropy) = 0.01
+        assert entries[0].target_weight == pytest.approx(0.01)
+        assert entries[0].metadata.get("entropy_regime") == "HIGH"
+
+    def test_entropy_filter_preserves_exits(self):
+        """Exit signals should not be scaled by entropy filter."""
+        cfg = ControllerConfig(
+            allocations={"A": StrategyAllocation(weight=1.0)},
+            enable_entropy_filter=True,
+            enable_vol_management=False,
+        )
+        ctrl = MultiStrategyController(cfg)
+
+        # Set high-entropy regime
+        ctrl._entropy_filter._current_scale = 0.10
+        ctrl._entropy_filter._n_updates = 100
+
+        exit_sig = StrategySignal(
+            strategy_name="A", symbol="AAPL", direction=0,
+            target_weight=0.0, confidence=0.5,
+        )
+        ctrl.register(StubStrategy("A", signals=[exit_sig]))
+        result = ctrl.generate_signals(["AAPL"], datetime.now())
+        assert len(result) == 1
+        assert result[0].is_exit
+        assert result[0].target_weight == 0.0
+
+    def test_entropy_feed_tracks_daily_returns(self):
+        """Controller should feed daily returns to entropy filter from SPY bars."""
+        cfg = ControllerConfig(enable_entropy_filter=True)
+        ctrl = MultiStrategyController(cfg)
+
+        # Day 1 bars
+        ctrl.update("SPY", datetime(2024, 1, 2, 9, 30), 470.0, 471.0, 469.0, 470.5, 1e6)
+        ctrl.update("SPY", datetime(2024, 1, 2, 15, 55), 470.5, 472.0, 469.0, 471.0, 1e6)
+
+        # Day 2 first bar triggers daily return computation for Day 1
+        ctrl.update("SPY", datetime(2024, 1, 3, 9, 30), 471.0, 472.0, 470.0, 471.5, 1e6)
+
+        assert ctrl._entropy_filter._n_updates == 1
+        assert ctrl._entropy_last_day == "2024-01-03"
+
+    def test_new_strategy_allocations(self):
+        """Verify new strategies have allocations in default config."""
+        cfg = ControllerConfig()
+        assert "LeadLagArbitrage" in cfg.allocations
+        assert "HurstAdaptive" in cfg.allocations
+        assert "TimeAdaptive" in cfg.allocations
+        assert cfg.allocations["LeadLagArbitrage"].weight == 0.08
+        assert cfg.allocations["HurstAdaptive"].weight == 0.08
+        assert cfg.allocations["TimeAdaptive"].weight == 0.06
+
+    def test_new_adapter_imports(self):
+        """Verify new adapters are importable from the package."""
+        from trading_algo.multi_strategy.adapters import (
+            HurstAdaptiveAdapter,
+            LeadLagAdapter,
+            TimeAdaptiveAdapter,
+        )
+        assert HurstAdaptiveAdapter is not None
+        assert LeadLagAdapter is not None
+        assert TimeAdaptiveAdapter is not None

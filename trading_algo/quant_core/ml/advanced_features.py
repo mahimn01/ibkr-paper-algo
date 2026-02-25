@@ -759,10 +759,11 @@ class AdvancedFeatureEngine:
         if len(timestamps) == 0:
             return None
         sample = timestamps[0]
-        if isinstance(sample, datetime.date):
-            return list(timestamps)
+        # Check datetime.datetime BEFORE datetime.date (datetime is a subclass of date)
         if isinstance(sample, datetime.datetime):
             return [t.date() for t in timestamps]
+        if isinstance(sample, datetime.date):
+            return list(timestamps)
         if isinstance(sample, (np.datetime64,)):
             # Convert via pandas-free path
             epoch = np.datetime64("1970-01-01", "D")
@@ -793,13 +794,14 @@ class AdvancedFeatureEngine:
             return first_fri + datetime.timedelta(weeks=2)
 
         expiry = third_friday(d.year, d.month)
-        if d > expiry:
+        d_date = d.date() if isinstance(d, datetime.datetime) else d
+        if d_date > expiry:
             # Move to next month
-            if d.month == 12:
-                expiry = third_friday(d.year + 1, 1)
+            if d_date.month == 12:
+                expiry = third_friday(d_date.year + 1, 1)
             else:
-                expiry = third_friday(d.year, d.month + 1)
-        return (expiry - d).days
+                expiry = third_friday(d_date.year, d_date.month + 1)
+        return (expiry - d_date).days
 
     @staticmethod
     def _days_to_quarter_end(d: datetime.date) -> int:
