@@ -1,0 +1,79 @@
+{
+  "SPY": {
+    "last_end_dt": "2016-01-06T16:00:00-05:00",
+    "chunks_done": 530,
+    "bars_total": 171708,
+    "completed": true,
+    "file": "/Users/mahimnpatel/Documents/Dev/randomThings/data/cache/SPY_5mins_2016-01-01_2026-02-25.json"
+  },
+  "QQQ": {
+    "last_end_dt": "2016-01-06T16:00:00-05:00",
+    "chunks_done": 530,
+    "bars_total": 171756,
+    "completed": true,
+    "file": "/Users/mahimnpatel/Documents/Dev/randomThings/data/cache/QQQ_5mins_2016-01-01_2026-02-25.json"
+  },
+  "AAPL": {
+    "last_end_dt": "2016-01-06T16:00:00-05:00",
+    "chunks_done": 530,
+    "bars_total": 171708,
+    "completed": true,
+    "file": "/Users/mahimnpatel/Documents/Dev/randomThings/data/cache/AAPL_5mins_2016-01-01_2026-02-25.json"
+  },
+  "NVDA": {
+    "last_end_dt": "2016-01-06T16:00:00-05:00",
+    "chunks_done": 530,
+    "bars_total": 171768,
+    "completed": true,
+    "file": "/Users/mahimnpatel/Documents/Dev/randomThings/data/cache/NVDA_5mins_2016-01-01_2026-02-25.json"
+  },
+  "MSFT": {
+    "last_end_dt": "2016-01-06T16:00:00-05:00",
+    "chunks_done": 530,
+    "bars_total": 171768,
+    "completed": true,
+    "file": "/Users/mahimnpatel/Documents/Dev/randomThings/data/cache/MSFT_5mins_2016-01-01_2026-02-25.json"
+  },
+  "SMCI": {
+    "last_end_dt": "2016-01-06T16:00:00-05:00",
+    "chunks_done": 530,
+    "bars_total": 171663,
+    "completed": true,
+    "file": "/Users/mahimnpatel/Documents/Dev/randomThings/data/cache/SMCI_5mins_2016-01-01_2026-02-25.json"
+  },
+  "IWM": {
+    "last_end_dt": "2016-01-06T16:00:00-05:00",
+    "chunks_done": 530,
+    "bars_total": 171768,
+    "completed": true,
+    "file": "/Users/mahimnpatel/Documents/Dev/randomThings/data/cache/IWM_5mins_2016-01-01_2026-02-25.json"
+  },
+  "HYG": {
+    "last_end_dt": "2016-01-06T16:00:00-05:00",
+    "chunks_done": 530,
+    "bars_total": 171765,
+    "completed": true,
+    "file": "/Users/mahimnpatel/Documents/Dev/randomThings/data/cache/HYG_5mins_2016-01-01_2026-02-25.json"
+  },
+  "LQD": {
+    "last_end_dt": "2016-01-06T16:00:00-05:00",
+    "chunks_done": 530,
+    "bars_total": 171763,
+    "completed": true,
+    "file": "/Users/mahimnpatel/Documents/Dev/randomThings/data/cache/LQD_5mins_2016-01-01_2026-02-25.json"
+  },
+  "TLT": {
+    "last_end_dt": "2016-01-06T16:00:00-05:00",
+    "chunks_done": 530,
+    "bars_total": 170261,
+    "completed": true,
+    "file": "/Users/mahimnpatel/Documents/Dev/randomThings/data/cache/TLT_5mins_2016-01-01_2026-02-25.json"
+  },
+  "GLD": {
+    "last_end_dt": "2016-01-06T16:00:00-05:00",
+    "chunks_done": 530,
+    "bars_total": 171768,
+    "completed": true,
+    "file": "/Users/mahimnpatel/Documents/Dev/randomThings/data/cache/GLD_5mins_2016-01-01_2026-02-25.json"
+  }
+}
