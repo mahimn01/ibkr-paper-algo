@@ -186,7 +186,7 @@ class PairsTradingStrategy:
                 if prices_a is None or prices_b is None:
                     continue
 
-                if len(prices_a) < self.config.lookback_period:
+                if len(prices_a) < self.config.lookback_period or len(prices_b) < self.config.lookback_period:
                     continue
 
                 # Calculate correlation
@@ -239,9 +239,10 @@ class PairsTradingStrategy:
             # Calculate historical spreads
             prices_a = price_data[stock_a]
             prices_b = price_data[stock_b]
+            n = min(len(prices_a), len(prices_b))
 
             historical_spreads = []
-            for i in range(max(0, len(prices_a) - self.config.lookback_period), len(prices_a)):
+            for i in range(max(0, n - self.config.lookback_period), n):
                 spread = self.calculate_spread(prices_a[i], prices_b[i], beta)
                 historical_spreads.append(spread)
 
