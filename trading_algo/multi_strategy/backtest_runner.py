@@ -385,9 +385,9 @@ class MultiStrategyBacktestRunner:
             sharpe = 0.0
 
         # Sortino ratio: use correct semi-deviation over ALL observations
-        # semi_dev = sqrt(mean(min(r - target, 0)^2)) * sqrt(252)
+        # semi_dev = sqrt(mean(min(r - target, 0)^2))  (daily, not annualized)
         downside_diff = np.minimum(dr - daily_rf, 0.0)
-        downside_dev = float(np.sqrt(np.mean(downside_diff ** 2)) * np.sqrt(252))
+        downside_dev = float(np.sqrt(np.mean(downside_diff ** 2)))
         if downside_dev > 1e-10:
             sortino = float(np.mean(excess) * np.sqrt(252) / downside_dev)
         else:
