@@ -40,6 +40,7 @@ class MultiStrategyBacktestConfig:
     intraday_vol_threshold: float = 0.0  # Only intraday signals when ann vol > this (0=always)
     max_position_pct: float = 0.25  # Max % of equity per symbol
     max_gross_exposure: float = 1.0  # Max gross exposure
+    trailing_stop_pct: float = 0.0  # 0 = disabled; e.g. 0.08 = 8% trailing stop
 
 
 @dataclass
@@ -125,6 +126,7 @@ class MultiStrategyBacktestRunner:
         self._positions: Dict[str, float] = {}  # symbol -> shares
         self._position_prices: Dict[str, float] = {}  # symbol -> avg entry price
         self._current_prices: Dict[str, float] = {}
+        self._position_peaks: Dict[str, float] = {}  # symbol -> peak price since entry
 
         # Tracking
         self._equity_curve: List[float] = [self.config.initial_capital]
@@ -213,6 +215,28 @@ class MultiStrategyBacktestRunner:
                 bars_since_signal = 0
 
             if is_new_day:
+                # Daily trailing stop checks (uses prior day close prices)
+                if self.config.trailing_stop_pct > 0:
+                    for sym in list(self._positions):
+                        px = self._current_prices.get(sym, 0)
+                        if px <= 0:
+                            continue
+                        shares = self._positions.get(sym, 0)
+                        if shares > 0:
+                            peak = self._position_peaks.get(sym, px)
+                            if px > peak:
+                                self._position_peaks[sym] = px
+                                peak = px
+                            if px <= peak * (1 - self.config.trailing_stop_pct):
+                                self._close_position(sym, ts)
+                        elif shares < 0:
+                            trough = self._position_peaks.get(sym, px)
+                            if px < trough:
+                                self._position_peaks[sym] = px
+                                trough = px
+                            if px >= trough * (1 + self.config.trailing_stop_pct):
+                                self._close_position(sym, ts)
+
                 # Generate signals at day boundary for daily strategies
                 if self._equity > 0:
                     signals = self.controller.generate_signals(
@@ -358,9 +382,13 @@ class MultiStrategyBacktestRunner:
         if abs(new_shares) < 0.01:
             self._positions.pop(sig.symbol, None)
             self._position_prices.pop(sig.symbol, None)
+            self._position_peaks.pop(sig.symbol, None)
         else:
             self._positions[sig.symbol] = new_shares
             self._position_prices[sig.symbol] = exec_price
+            # Initialize peak tracking for new positions
+            if sig.symbol not in self._position_peaks:
+                self._position_peaks[sig.symbol] = exec_price
 
         self._trades.append({
             "timestamp": timestamp,
@@ -406,6 +434,7 @@ class MultiStrategyBacktestRunner:
 
         self._positions.pop(symbol, None)
         self._position_prices.pop(symbol, None)
+        self._position_peaks.pop(symbol, None)
 
     def _update_equity(self) -> None:
         """Recalculate equity from cash + positions."""

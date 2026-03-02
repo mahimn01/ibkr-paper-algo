@@ -420,6 +420,7 @@ def build_controller_and_runner(
         signal_interval_bars=156,  # ~hourly (78 bars/day × 11 symbols ÷ ~5.5 signals/day)
         intraday_vol_threshold=0.15,  # only intraday signals when ann vol > 15%
         max_gross_exposure=1.5,    # match controller's 150% limit
+        trailing_stop_pct=0.0,     # disabled (tested 10-15%, hurt all periods)
     )
     runner = MultiStrategyBacktestRunner(controller, bt_cfg)
     return controller, runner
