@@ -1,13 +1,14 @@
 """
-Multi-Strategy Backtest Runner
+Multi-Strategy Backtest Runner — Enterprise Edition.
 
 Runs all strategies simultaneously on the same historical data to
 measure combined portfolio performance and diversification benefit.
 
-Unlike the single-strategy BacktestEngine in backtest_v2, this runner:
-  - Feeds data to the MultiStrategyController
-  - Tracks per-strategy attribution
-  - Measures diversification benefit (combined vs individual Sharpe)
+Enterprise features:
+  1. NEXT-BAR OPEN execution: signals on bar N fill at bar N+1 OPEN
+  2. VWAP entry prices on position adds (not overwrite)
+  3. Per-strategy attribution tracking
+  4. Diversification benefit measurement (combined vs individual Sharpe)
 """
 
 from __future__ import annotations
@@ -124,9 +125,15 @@ class MultiStrategyBacktestRunner:
         self._equity = self.config.initial_capital
         self._cash = self.config.initial_capital
         self._positions: Dict[str, float] = {}  # symbol -> shares
-        self._position_prices: Dict[str, float] = {}  # symbol -> avg entry price
+        self._position_prices: Dict[str, float] = {}  # symbol -> avg entry price (VWAP)
+        self._position_costs: Dict[str, float] = {}  # symbol -> cumulative cost (for VWAP)
+        self._position_sizes: Dict[str, float] = {}  # symbol -> cumulative abs shares (for VWAP)
         self._current_prices: Dict[str, float] = {}
+        self._current_opens: Dict[str, float] = {}  # symbol -> current bar's open
         self._position_peaks: Dict[str, float] = {}  # symbol -> peak price since entry
+
+        # Next-bar-open execution queue
+        self._pending_signals: List[StrategySignal] = []
 
         # Tracking
         self._equity_curve: List[float] = [self.config.initial_capital]
@@ -186,7 +193,11 @@ class MultiStrategyBacktestRunner:
             c = bar.close
             v = bar.volume
 
-            # Feed to controller
+            # ── 1. EXECUTE pending signals for this symbol at OPEN ──
+            self._current_opens[symbol] = o
+            self._execute_pending_for_symbol(symbol, ts)
+
+            # ── 2. Feed to controller ──
             self.controller.update(symbol, ts, o, h, l, c, v)
             self._current_prices[symbol] = c
 
@@ -314,23 +325,40 @@ class MultiStrategyBacktestRunner:
             daily_pnl=daily_pnl,
         )
 
+    def _execute_pending_for_symbol(
+        self, symbol: str, timestamp: datetime
+    ) -> None:
+        """Execute pending signals for a specific symbol at its bar's OPEN."""
+        remaining = []
+        for sig in self._pending_signals:
+            if sig.symbol == symbol:
+                if sig.is_exit:
+                    self._close_position(sig.symbol, timestamp, use_open=True)
+                elif sig.is_entry:
+                    self._open_position(sig, timestamp, use_open=True)
+            else:
+                remaining.append(sig)
+        self._pending_signals = remaining
+
     def _process_signals(
         self, signals: List[StrategySignal], timestamp: datetime
     ) -> None:
-        """Process signals into simulated trades."""
+        """Queue signals for next-bar-open execution."""
         for sig in signals:
-            if sig.is_exit:
-                self._close_position(sig.symbol, timestamp)
-            elif sig.is_entry:
-                self._open_position(sig, timestamp)
+            self._pending_signals.append(sig)
 
             # Track per-strategy
             strategy = sig.strategy_name.split("+")[0]
             self._signals_by_strategy[strategy] = self._signals_by_strategy.get(strategy, 0) + 1
 
-    def _open_position(self, sig: StrategySignal, timestamp: datetime) -> None:
+    def _open_position(
+        self, sig: StrategySignal, timestamp: datetime, use_open: bool = False
+    ) -> None:
         """Open or rebalance to a target position with risk limits."""
-        price = self._current_prices.get(sig.symbol)
+        if use_open:
+            price = self._current_opens.get(sig.symbol)
+        else:
+            price = self._current_prices.get(sig.symbol)
         if price is None or price <= 0 or self._equity <= 0:
             return
 
@@ -377,15 +405,33 @@ class MultiStrategyBacktestRunner:
 
         self._cash -= cost + commission
 
-        # Update position
+        # Update position with VWAP tracking
         new_shares = current_shares + delta_shares
         if abs(new_shares) < 0.01:
             self._positions.pop(sig.symbol, None)
             self._position_prices.pop(sig.symbol, None)
+            self._position_costs.pop(sig.symbol, None)
+            self._position_sizes.pop(sig.symbol, None)
             self._position_peaks.pop(sig.symbol, None)
         else:
             self._positions[sig.symbol] = new_shares
-            self._position_prices[sig.symbol] = exec_price
+            # VWAP entry price tracking
+            if current_shares != 0 and np.sign(delta_shares) == np.sign(current_shares):
+                # Adding to position in same direction: compute VWAP
+                prev_cost = self._position_costs.get(
+                    sig.symbol, abs(current_shares) * self._position_prices.get(sig.symbol, exec_price)
+                )
+                prev_size = self._position_sizes.get(sig.symbol, abs(current_shares))
+                new_cost = prev_cost + abs(delta_shares) * exec_price
+                new_size = prev_size + abs(delta_shares)
+                self._position_costs[sig.symbol] = new_cost
+                self._position_sizes[sig.symbol] = new_size
+                self._position_prices[sig.symbol] = new_cost / new_size
+            else:
+                # New position or reversal: reset VWAP
+                self._position_prices[sig.symbol] = exec_price
+                self._position_costs[sig.symbol] = abs(new_shares) * exec_price
+                self._position_sizes[sig.symbol] = abs(new_shares)
             # Initialize peak tracking for new positions
             if sig.symbol not in self._position_peaks:
                 self._position_peaks[sig.symbol] = exec_price
@@ -399,13 +445,18 @@ class MultiStrategyBacktestRunner:
             "strategy": sig.strategy_name,
         })
 
-    def _close_position(self, symbol: str, timestamp: datetime) -> None:
+    def _close_position(
+        self, symbol: str, timestamp: datetime, use_open: bool = False
+    ) -> None:
         """Close an existing position."""
         shares = self._positions.get(symbol, 0)
         if abs(shares) < 0.01:
             return
 
-        price = self._current_prices.get(symbol)
+        if use_open:
+            price = self._current_opens.get(symbol, self._current_prices.get(symbol))
+        else:
+            price = self._current_prices.get(symbol)
         if price is None:
             return
 
@@ -434,6 +485,8 @@ class MultiStrategyBacktestRunner:
 
         self._positions.pop(symbol, None)
         self._position_prices.pop(symbol, None)
+        self._position_costs.pop(symbol, None)
+        self._position_sizes.pop(symbol, None)
         self._position_peaks.pop(symbol, None)
 
     def _update_equity(self) -> None:
@@ -451,204 +504,18 @@ class MultiStrategyBacktestRunner:
         self,
         benchmark_daily_returns: Optional[np.ndarray] = None,
     ) -> MultiStrategyBacktestResults:
-        """Compute final metrics and build results.
-
-        Args:
-            benchmark_daily_returns: Optional array of benchmark (e.g. SPY)
-                daily returns aligned to the same dates as portfolio returns.
-                Used for beta, alpha, information ratio, and correlation.
-        """
-        ec = np.array(self._equity_curve) if self._equity_curve else np.array([self.config.initial_capital])
-        dr = np.array(self._daily_returns) if self._daily_returns else np.array([0.0])
-
-        total_return = (ec[-1] / ec[0]) - 1 if ec[0] > 0 else 0
-        n_years = max(len(dr) / 252, 1 / 252)
-        ann_return = (1 + total_return) ** (1 / n_years) - 1
-
-        # Annualized volatility (ddof=1 for unbiased estimator)
-        vol = float(np.std(dr, ddof=1) * np.sqrt(252)) if len(dr) > 1 else 0.15
-
-        # Sharpe ratio: (mean_daily_excess / std_daily) * sqrt(252)
-        rf = self.config.risk_free_rate
-        daily_rf = (1 + rf) ** (1 / 252) - 1
-        excess = dr - daily_rf
-        if len(dr) > 1 and np.std(excess, ddof=1) > 1e-10:
-            sharpe = float(np.mean(excess) / np.std(excess, ddof=1) * np.sqrt(252))
-        else:
-            sharpe = 0.0
-
-        # Sortino ratio: use correct semi-deviation over ALL observations
-        # semi_dev = sqrt(mean(min(r - target, 0)^2))  (daily, not annualized)
-        downside_diff = np.minimum(dr - daily_rf, 0.0)
-        downside_dev = float(np.sqrt(np.mean(downside_diff ** 2)))
-        if downside_dev > 1e-10:
-            sortino = float(np.mean(excess) * np.sqrt(252) / downside_dev)
-        else:
-            sortino = 0.0
-
-        # Max drawdown
-        peak = np.maximum.accumulate(ec)
-        dd = (peak - ec) / np.where(peak > 0, peak, 1)
-        max_dd = float(np.max(dd))
-
-        # Win rate from closed trades (not len(self._trades) which double-counts)
-        total_trades = self._closed_trades
-        win_rate = (self._winning_trades / self._closed_trades
-                    if self._closed_trades > 0 else 0.0)
-
-        # --- Institutional-quality metrics ---
-
-        # Calmar ratio: annualized return / max drawdown
-        calmar = ann_return / max_dd if max_dd > 1e-10 else 0.0
-
-        # Max drawdown duration (days in drawdown)
-        dd_duration = 0
-        max_dd_duration = 0
-        for d in dd:
-            if d > 0:
-                dd_duration += 1
-                max_dd_duration = max(max_dd_duration, dd_duration)
-            else:
-                dd_duration = 0
-
-        # VaR and CVaR (95%)
-        if len(dr) >= 10:
-            var_95 = float(-np.percentile(dr, 5))
-            tail = dr[dr <= np.percentile(dr, 5)]
-            cvar_95 = float(-np.mean(tail)) if len(tail) > 0 else var_95
-        else:
-            var_95 = 0.0
-            cvar_95 = 0.0
-
-        # Skewness and kurtosis
-        if len(dr) > 2:
-            mean_dr = np.mean(dr)
-            std_dr = np.std(dr, ddof=1)
-            if std_dr > 1e-10:
-                skewness = float(np.mean(((dr - mean_dr) / std_dr) ** 3))
-                kurtosis = float(np.mean(((dr - mean_dr) / std_dr) ** 4) - 3)
-            else:
-                skewness = 0.0
-                kurtosis = 0.0
-        else:
-            skewness = 0.0
-            kurtosis = 0.0
-
-        # Profit factor and expectancy from trade PnLs
-        trade_pnls = self._compute_trade_pnls()
-        if len(trade_pnls) > 0:
-            wins = trade_pnls[trade_pnls > 0]
-            losses = trade_pnls[trade_pnls < 0]
-            total_wins = float(np.sum(wins)) if len(wins) > 0 else 0.0
-            total_losses = abs(float(np.sum(losses))) if len(losses) > 0 else 0.0
-            profit_factor = total_wins / total_losses if total_losses > 1e-10 else 0.0
-            expectancy = float(np.mean(trade_pnls))
-        else:
-            profit_factor = 0.0
-            expectancy = 0.0
-
-        # Annual turnover: sum(|delta_shares * price|) / avg_equity / n_years
-        total_traded_value = sum(
-            abs(t["shares"] * t["price"]) for t in self._trades
-        )
-        avg_equity = float(np.mean(ec)) if len(ec) > 0 else self.config.initial_capital
-        annual_turnover = (total_traded_value / avg_equity / n_years) if avg_equity > 0 and n_years > 0 else 0.0
-
-        # --- Benchmark-relative metrics ---
-        beta = 0.0
-        alpha_annual = 0.0
-        information_ratio = 0.0
-        benchmark_corr = 0.0
-
-        if benchmark_daily_returns is not None and len(benchmark_daily_returns) >= 10:
-            bench = benchmark_daily_returns
-            # Align lengths
-            min_len = min(len(dr), len(bench))
-            algo_r = dr[:min_len]
-            bench_r = bench[:min_len]
-
-            # Beta = Cov(algo, bench) / Var(bench)
-            cov_matrix = np.cov(algo_r, bench_r)
-            var_bench = cov_matrix[1, 1]
-            if var_bench > 1e-10:
-                beta = float(cov_matrix[0, 1] / var_bench)
-
-            # Jensen's alpha: algo_ann - rf - beta * (bench_ann - rf)
-            bench_ann = float(np.mean(bench_r) * 252)
-            algo_ann = float(np.mean(algo_r) * 252)
-            alpha_annual = algo_ann - rf - beta * (bench_ann - rf)
-
-            # Information ratio: (algo - bench) / tracking_error
-            active_returns = algo_r - bench_r
-            tracking_error = float(np.std(active_returns, ddof=1) * np.sqrt(252))
-            if tracking_error > 1e-10:
-                information_ratio = float(np.mean(active_returns) * 252 / tracking_error)
-
-            # Correlation
-            corr = np.corrcoef(algo_r, bench_r)
-            benchmark_corr = float(corr[0, 1]) if not np.isnan(corr[0, 1]) else 0.0
-
-        # Per-strategy attribution
-        attribution = {}
-        for name, count in self._signals_by_strategy.items():
-            attribution[name] = StrategyAttribution(
-                name=name,
-                n_signals=count,
-            )
-
-        return MultiStrategyBacktestResults(
-            total_return=total_return,
-            annualized_return=ann_return,
-            sharpe_ratio=sharpe,
-            sortino_ratio=sortino,
-            max_drawdown=max_dd,
-            volatility=vol,
-            total_trades=total_trades,
-            win_rate=win_rate,
-            calmar_ratio=calmar,
-            profit_factor=profit_factor,
-            expectancy_per_trade=expectancy,
-            skewness=skewness,
-            kurtosis=kurtosis,
-            var_95=var_95,
-            cvar_95=cvar_95,
-            max_drawdown_duration_days=max_dd_duration,
-            annual_turnover=annual_turnover,
-            beta=beta,
-            alpha_annual=alpha_annual,
-            information_ratio=information_ratio,
-            benchmark_correlation=benchmark_corr,
-            equity_curve=ec.tolist(),
-            daily_returns=dr.tolist(),
+        """Compute final metrics using shared metrics module."""
+        from backtest.metrics import compute_backtest_metrics
+        return compute_backtest_metrics(
+            equity_curve=self._equity_curve,
+            daily_returns=self._daily_returns,
             timestamps=self._timestamps,
-            strategy_attribution=attribution,
+            trades=self._trades,
+            signals_by_strategy=self._signals_by_strategy,
+            closed_trades=self._closed_trades,
+            winning_trades=self._winning_trades,
+            initial_capital=self.config.initial_capital,
+            risk_free_rate=self.config.risk_free_rate,
+            trading_days_per_year=252,
+            benchmark_daily_returns=benchmark_daily_returns,
         )
-
-    def _compute_trade_pnls(self) -> np.ndarray:
-        """Extract per-trade P&L from the trade log.
-
-        Pairs consecutive BUY/SELL events for the same symbol into
-        round-trip P&L values.
-        """
-        # Match open/close pairs by symbol
-        open_trades: Dict[str, List[Dict]] = {}
-        pnls: List[float] = []
-
-        for t in self._trades:
-            sym = t["symbol"]
-            if t["side"] in ("BUY", "SHORT"):
-                open_trades.setdefault(sym, []).append(t)
-            elif t["side"] in ("SELL", "COVER"):
-                opens = open_trades.get(sym, [])
-                if opens:
-                    entry = opens.pop(0)
-                    entry_price = entry["price"]
-                    exit_price = t["price"]
-                    shares = abs(entry["shares"])
-                    if entry["side"] == "BUY":
-                        pnl = (exit_price - entry_price) * shares
-                    else:
-                        pnl = (entry_price - exit_price) * shares
-                    pnls.append(pnl)
-
-        return np.array(pnls) if pnls else np.array([])
