@@ -964,7 +964,7 @@ def _run_with_dashboard(trader: OrchestratorAutoTrader, broker: IBKRBroker, args
         )
 
         # Fetch data for each symbol
-        # NOTE: ib_insync has thread affinity - must be called from same thread
+        # NOTE: ib_async has thread affinity - must be called from same thread
         # So we call blocking code directly (UI may freeze briefly during IBKR calls)
         try:
             data = {}

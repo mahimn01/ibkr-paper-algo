@@ -703,7 +703,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-stream", action="store_true", help="Disable Gemini streaming")
     p.add_argument("--show-raw", action="store_true", help="Also store/display raw model JSON")
     p.add_argument("--no-color", action="store_true")
-    p.add_argument("--quiet-ibkr-logs", action="store_true", help="Reduce noisy ib_insync portfolio logs")
+    p.add_argument("--quiet-ibkr-logs", action="store_true", help="Reduce noisy ib_async portfolio logs")
     p.add_argument("--ui", choices=["auto", "plain", "rich", "tui"], default="auto", help="Terminal UI mode")
     return p
 
@@ -786,9 +786,9 @@ def main(argv: list[str] | None = None) -> int:
         client = GeminiClient(api_key=llm_cfg.gemini_api_key or "", model=effective_model)
 
     if args.quiet_ibkr_logs:
-        logging.getLogger("ib_insync").setLevel(logging.WARNING)
-        logging.getLogger("ib_insync.client").setLevel(logging.WARNING)
-        logging.getLogger("ib_insync.wrapper").setLevel(logging.WARNING)
+        logging.getLogger("ib_async").setLevel(logging.WARNING)
+        logging.getLogger("ib_async.client").setLevel(logging.WARNING)
+        logging.getLogger("ib_async.wrapper").setLevel(logging.WARNING)
 
     use_rich = _should_use_rich(args.ui)
     if str(args.ui).lower() in {"tui", "pt", "prompt"}:
@@ -823,8 +823,8 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     # IMPORTANT:
-    # IBKR + ib_insync are not safe to call across threads. The TUI runs model/tool
-    # turns in a background thread; to avoid cross-thread ib_insync usage we connect
+    # IBKR + ib_async are not safe to call across threads. The TUI runs model/tool
+    # turns in a background thread; to avoid cross-thread ib_async usage we connect
     # and disconnect the broker inside that worker thread per turn.
     tui_mode = str(args.ui).lower() in {"tui", "pt", "prompt"}
 

@@ -3,7 +3,7 @@
 Pull historical data from IBKR TWS/Gateway.
 
 Prerequisites:
-1. pip install ib_insync
+1. pip install ib_async
 2. TWS or IB Gateway running (paper: port 7497, live: port 7496)
 3. API access enabled in TWS/Gateway settings
 

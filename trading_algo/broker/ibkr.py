@@ -95,7 +95,7 @@ class CircuitState(Enum):
 # =============================================================================
 
 class IBKRDependencyError(RuntimeError):
-    """ib_insync import failed."""
+    """ib_async import failed."""
     pass
 
 
@@ -445,8 +445,8 @@ class _Factories:
     StopLimitOrder: Any
 
 
-def _load_ib_insync_factories() -> _Factories:
-    """Load ib_insync classes lazily."""
+def _load_ib_async_factories() -> _Factories:
+    """Load ib_async classes lazily."""
     import asyncio
     import warnings
 
@@ -463,13 +463,13 @@ def _load_ib_insync_factories() -> _Factories:
         asyncio.set_event_loop(asyncio.new_event_loop())
 
     try:
-        from ib_insync import (
+        from ib_async import (
             IB, Forex, Future, LimitOrder, MarketOrder,
             Option, Stock, StopLimitOrder, StopOrder
         )
     except Exception as exc:
         raise IBKRDependencyError(
-            "Failed to import 'ib_insync' (check your environment)."
+            "Failed to import 'ib_async' (check your environment)."
         ) from exc
 
     return _Factories(
@@ -569,7 +569,7 @@ class IBKRBroker:
 
     def _ensure_factories(self) -> _Factories:
         if self._factories is None:
-            self._factories = _load_ib_insync_factories()
+            self._factories = _load_ib_async_factories()
         return self._factories
 
     def _do_reconnect(self) -> bool:
@@ -666,7 +666,7 @@ class IBKRBroker:
     # -------------------------------------------------------------------------
 
     def _to_contract(self, instrument: InstrumentSpec) -> Any:
-        """Convert InstrumentSpec to ib_insync contract."""
+        """Convert InstrumentSpec to ib_async contract."""
         factories = self._ensure_factories()
         spec = validate_instrument(instrument)
 
@@ -747,7 +747,7 @@ class IBKRBroker:
         as soon as the order status is confirmed.
 
         Args:
-            trade: The ib_insync Trade object
+            trade: The ib_async Trade object
             timeout: Maximum wait time in seconds
             target_statuses: Set of statuses to wait for
 
@@ -769,7 +769,7 @@ class IBKRBroker:
             if status in target_statuses:
                 return status
 
-            # Use ib_insync's sleep (processes events)
+            # Use ib_async's sleep (processes events)
             self._ib.sleep(cfg.order_poll_interval)
 
         # Timeout - return whatever status we have
@@ -1022,7 +1022,7 @@ class IBKRBroker:
         )
 
     def _build_order(self, req: OrderRequest, order_id: int | None) -> Any:
-        """Build an ib_insync order object."""
+        """Build an ib_async order object."""
         factories = self._ensure_factories()
 
         if req.order_type == "MKT":
@@ -1536,7 +1536,7 @@ def _format_ibkr_dt(value: dt.datetime) -> str:
 
 
 def _contract_to_instrument(contract: Any) -> InstrumentSpec:
-    """Convert ib_insync contract to InstrumentSpec."""
+    """Convert ib_async contract to InstrumentSpec."""
     sec_type = str(getattr(contract, "secType", "")).upper()
     symbol = str(getattr(contract, "symbol", "")).upper()
     exchange = str(getattr(contract, "exchange", "")).upper() or None
