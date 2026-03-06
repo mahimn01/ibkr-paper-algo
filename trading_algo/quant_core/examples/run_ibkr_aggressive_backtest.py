@@ -12,7 +12,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-# Fix asyncio event loop issue with ib_insync on Python 3.10+
+# Fix asyncio event loop issue with ib_async on Python 3.10+
 import asyncio
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)

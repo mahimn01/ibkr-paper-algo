@@ -8,7 +8,7 @@ This script demonstrates:
 3. Optionally running live paper trading
 
 Prerequisites:
-    pip install ib_insync
+    pip install ib_async
 
 Usage:
     # Backtest mode (pull data, run backtest)

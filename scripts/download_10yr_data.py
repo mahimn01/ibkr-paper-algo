@@ -7,7 +7,7 @@ historical data rate limits (~60 requests per 10 minutes). Supports resume
 from interruption via a manifest file.
 
 Prerequisites:
-    1. pip install ib_insync
+    1. pip install ib_async
     2. IB Gateway running on port 4002 (paper trading)
     3. API access enabled in Gateway settings
 
@@ -31,13 +31,13 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 # ---------------------------------------------------------------------------
-# Fix Python 3.14 asyncio event loop issue BEFORE importing ib_insync.
-# ib_insync probes for a running loop at import time; on 3.14 there may not
+# Fix Python 3.14 asyncio event loop issue BEFORE importing ib_async.
+# ib_async probes for a running loop at import time; on 3.14 there may not
 # be one yet in the main thread.
 # ---------------------------------------------------------------------------
 asyncio.set_event_loop(asyncio.new_event_loop())
 
-from ib_insync import IB, Stock  # noqa: E402
+from ib_async import IB, Stock  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -65,7 +65,7 @@ def cache_filename(symbol: str, start_date: str, end_date: str) -> str:
 
 
 def bars_to_dicts(bars) -> list[dict]:
-    """Convert ib_insync BarData list to list of dicts matching cache format.
+    """Convert ib_async BarData list to list of dicts matching cache format.
 
     IBKR returns bar timestamps in UTC.  We convert to US/Eastern local time
     and store as an ISO-8601 string without timezone suffix (matching the
