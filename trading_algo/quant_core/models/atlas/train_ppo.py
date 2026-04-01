@@ -1,22 +1,34 @@
-"""Phase 2: PPO RL fine-tuning for ATLAS."""
+"""Phase 2: PPO RL fine-tuning for ATLAS with real BSM options mechanics."""
 
 from __future__ import annotations
 
 import math
 import random
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 from torch import Tensor
 
 from trading_algo.quant_core.models.atlas.config import ATLASConfig
+from trading_algo.quant_core.models.atlas.features import ATLASFeatureComputer, RollingNormalizer
+from trading_algo.quant_core.strategies.options.iv_rank import iv_series_from_prices, iv_rank
+from trading_algo.quant_core.strategies.options.wheel import (
+    _find_strike_by_delta,
+    _price_option,
+    _round_strike,
+)
 
+
+# ---------------------------------------------------------------------------
+# Rollout buffer
+# ---------------------------------------------------------------------------
 
 @dataclass
 class Rollout:
-    """Stores a batch of rollout data for PPO."""
     features: list[Tensor] = field(default_factory=list)
     timestamps: list[Tensor] = field(default_factory=list)
     dow: list[Tensor] = field(default_factory=list)
@@ -33,95 +45,515 @@ class Rollout:
     dones: list[bool] = field(default_factory=list)
 
 
-class TradingEnvironment:
-    """Simulates single-symbol options trading for PPO rollouts."""
+# ---------------------------------------------------------------------------
+# Options environment with real BSM pricing
+# ---------------------------------------------------------------------------
+
+_RISK_FREE_RATE: float = 0.045
+_SKEW_SLOPE: float = 0.8
+_SLIPPAGE_PER_SHARE: float = 0.05
+_COMMISSION_PER_CONTRACT: float = 0.90
+_COMMISSION_PER_SHARE: float = 0.005
+_INITIAL_CAPITAL: float = 100_000.0
+_MIN_EQUITY_FRACTION: float = 0.50  # episode ends at 50% loss
+
+
+class OptionsEnvironment:
+    """Simulates single-symbol options trading with real BSM pricing for PPO rollouts.
+
+    Action vector (5D, all in [0,1] from model, rescaled here):
+        delta in [0, 0.50]:     strike selection (< 0.05 = no trade)
+        direction in [-1, +1]:  < -0.3 sell put, > 0.3 buy call, else hold
+        leverage in [0, 1]:     fraction of capital to deploy
+        dte in [14, 90]:        days to expiration
+        profit_target in [0,1]: 0 = let expire, 0.5 = close at 50% profit, etc.
+    """
 
     def __init__(
         self,
-        all_features: dict[str, np.ndarray],
+        all_data: dict[str, dict],
         config: ATLASConfig,
-    ):
-        self.all_features = all_features
+    ) -> None:
+        """
+        Args:
+            all_data: sym -> {
+                "closes": np.ndarray (float64),
+                "ivs": np.ndarray (float64),
+                "iv_ranks": np.ndarray (float64),
+                "normed": np.ndarray (float32, T x 16),
+                "mu": np.ndarray (float32, T x 16),
+                "sigma": np.ndarray (float32, T x 16),
+                "timestamps": np.ndarray (float64),
+                "dow": np.ndarray (int32),
+                "month": np.ndarray (int32),
+            }
+            config: ATLASConfig
+        """
+        self.all_data = all_data
         self.config = config
-        self.symbols = list(all_features.keys())
+        self.symbols = list(all_data.keys())
+        self._episode_len = 500
         self.reset()
 
     def reset(self) -> dict[str, Tensor]:
         sym = random.choice(self.symbols)
-        data = self.all_features[sym]
-        T = data.shape[0]
-        max_ep_len = min(500, T - self.config.context_len - 60)
+        data = self.all_data[sym]
+        T = len(data["closes"])
+        max_ep_len = min(self._episode_len, T - self.config.context_len - 60)
         if max_ep_len < 100:
             max_ep_len = 100
-        start = random.randint(self.config.context_len, max(self.config.context_len, T - max_ep_len - 1))
+
+        start = random.randint(
+            self.config.context_len,
+            max(self.config.context_len, T - max_ep_len - 1),
+        )
         self._data = data
         self._sym = sym
         self._t = start
         self._start = start
         self._end = min(start + max_ep_len, T - 1)
-        self._equity = 1.0
-        self._peak = 1.0
-        self._prev_action = np.zeros(5)
-        self._ema_ret = 0.0
-        self._ema_ret2 = 0.0
+
+        # Underlying price arrays (float64 for financial math)
+        self._closes: np.ndarray = data["closes"]
+        self._ivs: np.ndarray = data["ivs"]
+        self._iv_ranks: np.ndarray = data["iv_ranks"]
+
+        # Position state (all float64)
+        self.position_type: str = "none"  # "none", "short_put", "short_call", "long_call", "stock"
+        self.position_strike: float = 0.0
+        self.position_expiry_days_left: int = 0
+        self.position_entry_premium: float = 0.0
+        self.position_contracts: int = 0
+        self.position_entry_dte: int = 0
+        self.profit_target: float = 0.0
+
+        self.stock_qty: int = 0
+        self.stock_avg_cost: float = 0.0
+        self.cash: float = _INITIAL_CAPITAL
+
+        # Equity tracking
+        price = float(self._closes[self._t])
+        iv = float(self._ivs[self._t])
+        self._prev_equity = self._compute_equity(price, iv)
+        self._peak = self._prev_equity
         self._target_sharpe = random.uniform(0.3, 2.0)
+
         return self._get_obs()
+
+    # ---- observation -------------------------------------------------------
 
     def _get_obs(self) -> dict[str, Tensor]:
         L = self.config.context_len
-        window = self._data[self._t - L + 1 : self._t + 1]  # (L, F)
-        features = torch.tensor(window[:, :16], dtype=torch.float32).unsqueeze(0)
-        ts = torch.arange(L, dtype=torch.float32).unsqueeze(0)
-        dow = torch.zeros(1, L, dtype=torch.long)
-        mo = torch.zeros(1, L, dtype=torch.long)
+        t = self._t
+
+        normed = self._data["normed"]
+        mu = self._data["mu"]
+        sigma = self._data["sigma"]
+        timestamps = self._data["timestamps"]
+        dow = self._data["dow"]
+        month = self._data["month"]
+
+        window_normed = normed[t - L + 1: t + 1].copy()  # (L, 16)
+        window_mu = mu[t - L + 1: t + 1].copy()
+        window_sigma = sigma[t - L + 1: t + 1].copy()
+        window_ts = timestamps[t - L + 1: t + 1].copy()
+        window_dow = dow[t - L + 1: t + 1].copy()
+        window_month = month[t - L + 1: t + 1].copy()
+
+        # Inject position state into features 12-15 of the last timestep
+        price = float(self._closes[t])
+        iv = float(self._ivs[t])
+        equity = self._compute_equity(price, iv)
+
+        # pos_state: -1 (short option), 0 (none), +1 (long option/stock)
+        if self.position_type in ("short_put", "short_call"):
+            pos_state = -1.0
+        elif self.position_type in ("long_call", "stock"):
+            pos_state = 1.0
+        else:
+            pos_state = 0.0
+
+        # pos_pnl: unrealized P&L as fraction of capital
+        pos_pnl = (equity - _INITIAL_CAPITAL) / _INITIAL_CAPITAL
+
+        # days_in: days remaining / entry DTE (0 if no position)
+        if self.position_type != "none" and self.position_entry_dte > 0:
+            days_in = float(self.position_expiry_days_left) / float(self.position_entry_dte)
+        elif self.position_type == "stock":
+            days_in = 1.0
+        else:
+            days_in = 0.0
+
+        # cash_pct: cash / total equity
+        cash_pct = self.cash / max(equity, 1.0)
+
+        # Write position state into the last row of the window (features 12-15)
+        window_normed[-1, 12] = np.float32(pos_state)
+        window_normed[-1, 13] = np.float32(np.clip(pos_pnl, -2.0, 2.0))
+        window_normed[-1, 14] = np.float32(np.clip(days_in, 0.0, 1.0))
+        window_normed[-1, 15] = np.float32(np.clip(cash_pct, 0.0, 1.0))
+
+        # Replace NaN with 0
+        window_normed = np.nan_to_num(window_normed, nan=0.0)
+        window_mu = np.nan_to_num(window_mu, nan=0.0)
+        window_sigma = np.nan_to_num(window_sigma, nan=1.0)
+
+        features = torch.tensor(window_normed, dtype=torch.float32).unsqueeze(0)
+        ts = torch.tensor(window_ts, dtype=torch.float32).unsqueeze(0)
+        dow_t = torch.tensor(window_dow, dtype=torch.long).unsqueeze(0)
+        mo_t = torch.tensor(window_month, dtype=torch.long).unsqueeze(0)
         opex = torch.zeros(1, L)
         qtr = torch.zeros(1, L)
-        mu = torch.zeros(1, L, 16)
-        sigma = torch.ones(1, L, 16) * 0.2
+        mu_t = torch.tensor(window_mu, dtype=torch.float32).unsqueeze(0)
+        sigma_t = torch.tensor(window_sigma, dtype=torch.float32).unsqueeze(0)
         rtg = torch.tensor([self._target_sharpe])
+
         return {
-            "features": features, "timestamps": ts, "dow": dow, "month": mo,
-            "is_opex": opex, "is_qtr": qtr, "pre_mu": mu, "pre_sigma": sigma, "rtg": rtg,
+            "features": features, "timestamps": ts, "dow": dow_t, "month": mo_t,
+            "is_opex": opex, "is_qtr": qtr, "pre_mu": mu_t, "pre_sigma": sigma_t, "rtg": rtg,
         }
 
+    # ---- equity computation ------------------------------------------------
+
+    def _compute_equity(self, price: float, iv: float) -> float:
+        equity = self.cash + self.stock_qty * price
+
+        if self.position_type == "short_put":
+            tte = max(self.position_expiry_days_left / 365.0, 1.0 / 365.0)
+            current_val = _price_option(
+                price, self.position_strike, tte, iv,
+                _RISK_FREE_RATE, "put",
+                skew_slope=_SKEW_SLOPE,
+            )
+            equity -= current_val * self.position_contracts * 100
+
+        elif self.position_type == "short_call":
+            tte = max(self.position_expiry_days_left / 365.0, 1.0 / 365.0)
+            current_val = _price_option(
+                price, self.position_strike, tte, iv,
+                _RISK_FREE_RATE, "call",
+                skew_slope=_SKEW_SLOPE,
+            )
+            equity -= current_val * self.position_contracts * 100
+
+        elif self.position_type == "long_call":
+            tte = max(self.position_expiry_days_left / 365.0, 1.0 / 365.0)
+            current_val = _price_option(
+                price, self.position_strike, tte, iv,
+                _RISK_FREE_RATE, "call",
+                skew_slope=_SKEW_SLOPE,
+            )
+            equity += current_val * self.position_contracts * 100
+
+        return equity
+
+    # ---- opening positions -------------------------------------------------
+
+    def _open_position(self, action: np.ndarray, price: float, iv: float) -> None:
+        delta_raw = float(action[0])
+        direction = float(action[1])
+        leverage = float(action[2])
+        dte_raw = float(action[3])
+        profit_target = float(action[4])
+
+        # Rescale from model output [0,1] to actual ranges
+        delta = np.clip(delta_raw, 0.0, 0.50)
+        dte = int(np.clip(dte_raw * (self.config.dte_max - self.config.dte_min) + self.config.dte_min, self.config.dte_min, self.config.dte_max))
+        leverage = np.clip(leverage, 0.0, 1.0)
+        profit_target = np.clip(profit_target, 0.0, 1.0)
+
+        if delta < 0.05:
+            return  # no trade
+
+        tte_years = dte / 365.0
+
+        if direction < -0.3:
+            # SELL PUT
+            if iv <= 0.01:
+                return
+            strike = _find_strike_by_delta(
+                price, delta, tte_years, iv,
+                _RISK_FREE_RATE, "put",
+            )
+            if strike <= 0:
+                return
+
+            collateral_per_contract = strike * 100.0
+            deployable = self.cash * leverage * 0.50
+            contracts = int(deployable / collateral_per_contract)
+            if contracts <= 0:
+                return
+
+            premium_per_share = _price_option(
+                price, strike, tte_years, iv,
+                _RISK_FREE_RATE, "put",
+                skew_slope=_SKEW_SLOPE,
+            )
+            premium_per_share = max(premium_per_share - _SLIPPAGE_PER_SHARE, 0.01)
+            commission = _COMMISSION_PER_CONTRACT * contracts
+
+            # Collect premium
+            self.cash += premium_per_share * contracts * 100 - commission
+
+            self.position_type = "short_put"
+            self.position_strike = strike
+            self.position_expiry_days_left = dte
+            self.position_entry_premium = premium_per_share
+            self.position_contracts = contracts
+            self.position_entry_dte = dte
+            self.profit_target = profit_target
+
+        elif direction > 0.3:
+            # BUY CALL (LEAPS-like directional)
+            if iv <= 0.01:
+                return
+            strike = _find_strike_by_delta(
+                price, delta, tte_years, iv,
+                _RISK_FREE_RATE, "call",
+            )
+            if strike <= 0:
+                return
+
+            premium_per_share = _price_option(
+                price, strike, tte_years, iv,
+                _RISK_FREE_RATE, "call",
+                skew_slope=_SKEW_SLOPE,
+            )
+            premium_per_share += _SLIPPAGE_PER_SHARE  # pay at the ask
+            if premium_per_share <= 0:
+                return
+
+            premium_per_contract = premium_per_share * 100.0
+            deployable = self.cash * leverage * 0.50
+            contracts = int(deployable / premium_per_contract)
+            if contracts <= 0:
+                return
+
+            cost = premium_per_contract * contracts
+            commission = _COMMISSION_PER_CONTRACT * contracts
+            self.cash -= cost + commission
+
+            self.position_type = "long_call"
+            self.position_strike = strike
+            self.position_expiry_days_left = dte
+            self.position_entry_premium = premium_per_share
+            self.position_contracts = contracts
+            self.position_entry_dte = dte
+            self.profit_target = profit_target
+
+        elif self.position_type == "stock":
+            # If holding stock from assignment, can sell covered call
+            if self.stock_qty >= 100:
+                if iv <= 0.01:
+                    return
+                cc_contracts = self.stock_qty // 100
+                cc_strike = _find_strike_by_delta(
+                    price, max(delta, 0.20), tte_years, iv,
+                    _RISK_FREE_RATE, "call",
+                )
+                # Never sell call below cost basis
+                cc_strike = max(cc_strike, _round_strike(self.stock_avg_cost, price))
+                if cc_strike <= 0:
+                    return
+
+                premium_per_share = _price_option(
+                    price, cc_strike, tte_years, iv,
+                    _RISK_FREE_RATE, "call",
+                    skew_slope=_SKEW_SLOPE,
+                )
+                premium_per_share = max(premium_per_share - _SLIPPAGE_PER_SHARE, 0.01)
+                commission = _COMMISSION_PER_CONTRACT * cc_contracts
+
+                self.cash += premium_per_share * cc_contracts * 100 - commission
+
+                self.position_type = "short_call"
+                self.position_strike = cc_strike
+                self.position_expiry_days_left = dte
+                self.position_entry_premium = premium_per_share
+                self.position_contracts = cc_contracts
+                self.position_entry_dte = dte
+                self.profit_target = profit_target
+
+    # ---- daily step --------------------------------------------------------
+
     def step(self, action: np.ndarray) -> tuple[dict[str, Tensor], float, bool]:
-        direction = action[1]
-        leverage = action[2]
-        if self._t + 1 >= len(self._data):
+        self._t += 1
+        if self._t >= len(self._closes) or self._t >= self._end:
             return self._get_obs(), 0.0, True
 
-        price_now = self._data[self._t, 0] if self._data.shape[1] > 0 else 0.0
-        price_next = self._data[self._t + 1, 0] if self._t + 1 < len(self._data) else price_now
-        daily_ret = (price_next - price_now) / max(abs(price_now), 1e-8) if price_now != 0 else 0.0
-        trade_ret = direction * leverage * daily_ret
+        price = float(self._closes[self._t])
+        iv = float(self._ivs[self._t])
+        just_closed = False
 
-        self._equity *= (1 + trade_ret)
-        self._peak = max(self._peak, self._equity)
+        # --- Manage existing option positions ---
+        if self.position_type == "short_put":
+            self.position_expiry_days_left -= 1
 
-        # DSR reward
-        eta = 2.0 / 64.0
-        self._ema_ret += eta * (trade_ret - self._ema_ret)
-        self._ema_ret2 += eta * (trade_ret ** 2 - self._ema_ret2)
-        var = self._ema_ret2 - self._ema_ret ** 2
-        dsr = 0.0
-        if var > 1e-12:
-            dsr = (self._ema_ret2 * eta * (trade_ret - self._ema_ret) -
-                   0.5 * self._ema_ret * eta * (trade_ret**2 - self._ema_ret2)) / max(var ** 1.5, 1e-12)
+            if self.position_expiry_days_left <= 0:
+                # EXPIRY
+                intrinsic = max(self.position_strike - price, 0.0)
+                if intrinsic > 0:
+                    # Assignment: buy shares at strike
+                    shares = self.position_contracts * 100
+                    cost = self.position_strike * shares
+                    commission = _COMMISSION_PER_SHARE * shares
+                    self.cash -= cost + commission
+                    self.stock_qty += shares
+                    self.stock_avg_cost = self.position_strike - self.position_entry_premium
+                    self.position_type = "stock"
+                else:
+                    # Expired worthless: keep full premium
+                    self.position_type = "none"
+                self.position_strike = 0.0
+                self.position_contracts = 0
+                self.position_entry_premium = 0.0
+                just_closed = True
+            else:
+                # Check profit target
+                tte = max(self.position_expiry_days_left / 365.0, 1.0 / 365.0)
+                current_value = _price_option(
+                    price, self.position_strike, tte, iv,
+                    _RISK_FREE_RATE, "put",
+                    skew_slope=_SKEW_SLOPE,
+                )
+                if self.position_entry_premium > 0:
+                    pnl_pct = (self.position_entry_premium - current_value) / self.position_entry_premium
+                else:
+                    pnl_pct = 0.0
 
-        # Drawdown penalty
-        dd = (self._peak - self._equity) / max(self._peak, 1e-8)
-        dd_pen = 10.0 * max(0.0, dd - 0.20) ** 2
+                if self.profit_target > 0.05 and pnl_pct >= self.profit_target:
+                    # Close: buy back the put
+                    buyback = current_value + _SLIPPAGE_PER_SHARE
+                    self.cash -= buyback * self.position_contracts * 100
+                    commission = _COMMISSION_PER_CONTRACT * self.position_contracts
+                    self.cash -= commission
+                    self.position_type = "none"
+                    self.position_strike = 0.0
+                    self.position_contracts = 0
+                    self.position_entry_premium = 0.0
+                    just_closed = True
 
-        # Transaction cost
-        tc = 0.01 * float(np.abs(action - self._prev_action).sum())
-        self._prev_action = action.copy()
+        elif self.position_type == "short_call":
+            self.position_expiry_days_left -= 1
 
-        reward = dsr - dd_pen - tc
-        self._t += 1
+            if self.position_expiry_days_left <= 0:
+                intrinsic = max(price - self.position_strike, 0.0)
+                if intrinsic > 0:
+                    # Called away: sell shares at strike
+                    shares = self.position_contracts * 100
+                    proceeds = self.position_strike * shares
+                    commission = _COMMISSION_PER_SHARE * shares
+                    self.cash += proceeds - commission
+                    self.stock_qty -= shares
+                    if self.stock_qty <= 0:
+                        self.stock_qty = 0
+                        self.stock_avg_cost = 0.0
+                    self.position_type = "none" if self.stock_qty == 0 else "stock"
+                else:
+                    # Expired worthless: keep premium, still hold stock
+                    self.position_type = "stock"
+                self.position_strike = 0.0
+                self.position_contracts = 0
+                self.position_entry_premium = 0.0
+                just_closed = True
+            else:
+                tte = max(self.position_expiry_days_left / 365.0, 1.0 / 365.0)
+                current_value = _price_option(
+                    price, self.position_strike, tte, iv,
+                    _RISK_FREE_RATE, "call",
+                    skew_slope=_SKEW_SLOPE,
+                )
+                if self.position_entry_premium > 0:
+                    pnl_pct = (self.position_entry_premium - current_value) / self.position_entry_premium
+                else:
+                    pnl_pct = 0.0
+
+                if self.profit_target > 0.05 and pnl_pct >= self.profit_target:
+                    buyback = current_value + _SLIPPAGE_PER_SHARE
+                    self.cash -= buyback * self.position_contracts * 100
+                    commission = _COMMISSION_PER_CONTRACT * self.position_contracts
+                    self.cash -= commission
+                    self.position_type = "stock"
+                    self.position_strike = 0.0
+                    self.position_contracts = 0
+                    self.position_entry_premium = 0.0
+                    just_closed = True
+
+        elif self.position_type == "long_call":
+            self.position_expiry_days_left -= 1
+
+            if self.position_expiry_days_left <= 0:
+                # Expiry
+                intrinsic = max(price - self.position_strike, 0.0)
+                if intrinsic > 0:
+                    # Exercise: collect intrinsic value
+                    self.cash += intrinsic * self.position_contracts * 100
+                    commission = _COMMISSION_PER_SHARE * self.position_contracts * 100
+                    self.cash -= commission
+                # If OTM, premium was already paid — no action needed
+                self.position_type = "none"
+                self.position_strike = 0.0
+                self.position_contracts = 0
+                self.position_entry_premium = 0.0
+                just_closed = True
+            else:
+                tte = max(self.position_expiry_days_left / 365.0, 1.0 / 365.0)
+                current_value = _price_option(
+                    price, self.position_strike, tte, iv,
+                    _RISK_FREE_RATE, "call",
+                    skew_slope=_SKEW_SLOPE,
+                )
+                if self.position_entry_premium > 0:
+                    pnl_pct = (current_value - self.position_entry_premium) / self.position_entry_premium
+                else:
+                    pnl_pct = 0.0
+
+                if self.profit_target > 0.05 and pnl_pct >= self.profit_target:
+                    # Close: sell the call
+                    sell_price = max(current_value - _SLIPPAGE_PER_SHARE, 0.0)
+                    self.cash += sell_price * self.position_contracts * 100
+                    commission = _COMMISSION_PER_CONTRACT * self.position_contracts
+                    self.cash -= commission
+                    self.position_type = "none"
+                    self.position_strike = 0.0
+                    self.position_contracts = 0
+                    self.position_entry_premium = 0.0
+                    just_closed = True
+
+        # --- Open new position if flat and not just closed ---
+        if self.position_type in ("none", "stock") and not just_closed:
+            self._open_position(action, price, iv)
+
+        # --- Compute reward ---
+        new_equity = self._compute_equity(price, iv)
+        if self._prev_equity > 0:
+            daily_return = (new_equity - self._prev_equity) / self._prev_equity
+        else:
+            daily_return = 0.0
+        reward = daily_return * 100.0  # scale to percentage points
+
+        # Mild drawdown penalty
+        self._peak = max(self._peak, new_equity)
+        dd = (self._peak - new_equity) / max(self._peak, 1.0)
+        if dd > 0.15:
+            reward -= 0.5 * (dd - 0.15) ** 2
+
+        # Clip reward to prevent explosions
+        reward = float(np.clip(reward, -5.0, 5.0))
+
+        self._prev_equity = new_equity
+
+        # Episode termination
         done = self._t >= self._end
+        if new_equity < _INITIAL_CAPITAL * _MIN_EQUITY_FRACTION:
+            done = True  # 50% loss = game over
 
         return self._get_obs(), reward, done
 
+
+# ---------------------------------------------------------------------------
+# GAE
+# ---------------------------------------------------------------------------
 
 def compute_gae(
     rewards: list[float],
@@ -130,46 +562,116 @@ def compute_gae(
     gamma: float = 0.99,
     lam: float = 0.95,
 ) -> tuple[Tensor, Tensor]:
-    """Generalized Advantage Estimation."""
     T = len(rewards)
     advantages = torch.zeros(T)
     returns = torch.zeros(T)
     last_gae = 0.0
 
     for t in reversed(range(T)):
-        next_val = values[t + 1] if t + 1 < T and not dones[t] else 0.0
-        delta = rewards[t] + gamma * next_val - values[t]
+        next_val = float(values[t + 1]) if t + 1 < T and not dones[t] else 0.0
+        delta = float(rewards[t]) + gamma * next_val - float(values[t])
         last_gae = delta + gamma * lam * (0.0 if dones[t] else last_gae)
-        advantages[t] = last_gae
-        returns[t] = advantages[t] + values[t]
+        advantages[t] = float(last_gae)
+        returns[t] = float(advantages[t]) + float(values[t])
 
     return advantages, returns
 
 
+# ---------------------------------------------------------------------------
+# Data loading
+# ---------------------------------------------------------------------------
+
+def _load_training_data(
+    feature_dir: str = "data/atlas_features",
+    cache_dir: str = "data/atlas_cache",
+) -> dict[str, dict]:
+    """Load pre-computed features and raw price data for each symbol."""
+    feature_path = Path(feature_dir)
+    cache_path = Path(cache_dir)
+    all_data: dict[str, dict] = {}
+
+    for npz_file in sorted(feature_path.glob("*_features.npz")):
+        sym = npz_file.stem.replace("_features", "")
+        parquet_file = cache_path / f"{sym}.parquet"
+        if not parquet_file.exists():
+            continue
+
+        npz = np.load(npz_file)
+        df = pd.read_parquet(parquet_file)
+
+        closes = df["Close"].values.astype(np.float64)
+        T = len(closes)
+
+        # Compute IV series from prices
+        ivs = iv_series_from_prices(closes, rv_window=30)
+        ivs = np.nan_to_num(ivs, nan=0.25).astype(np.float64)
+
+        # Compute IV rank series
+        iv_est = iv_series_from_prices(closes, rv_window=30)
+        iv_ranks = np.full(T, 50.0, dtype=np.float64)
+        for t in range(T):
+            if not np.isnan(iv_est[t]):
+                iv_ranks[t] = iv_rank(iv_est, t, lookback=252)
+
+        normed = npz["normed"]  # (T, 16) float32
+        mu = npz["mu"]          # (T, 16) float32
+        sigma = npz["sigma"]    # (T, 16) float32
+        timestamps = npz["timestamps"]  # (T,) float64
+        dow = npz["dow"]        # (T,) int32
+        month = npz["month"]    # (T,) int32
+
+        # Verify lengths match
+        min_len = min(T, len(normed))
+        all_data[sym] = {
+            "closes": closes[:min_len],
+            "ivs": ivs[:min_len],
+            "iv_ranks": iv_ranks[:min_len],
+            "normed": normed[:min_len],
+            "mu": mu[:min_len],
+            "sigma": sigma[:min_len],
+            "timestamps": timestamps[:min_len],
+            "dow": dow[:min_len],
+            "month": month[:min_len],
+        }
+
+    return all_data
+
+
+# ---------------------------------------------------------------------------
+# PPO training loop
+# ---------------------------------------------------------------------------
+
 def train_ppo(
     model: nn.Module,
-    train_features: dict[str, np.ndarray],
-    config: ATLASConfig,
+    train_features: dict[str, np.ndarray] | None = None,
+    config: ATLASConfig | None = None,
     checkpoint_dir: str = "checkpoints/atlas",
     device: str = "auto",
     n_iterations: int = 500,
     rollout_steps: int = 2048,
+    feature_dir: str = "data/atlas_features",
+    cache_dir: str = "data/atlas_cache",
 ) -> dict:
     """
-    Phase 2: PPO RL fine-tuning with DSR reward.
+    Phase 2: PPO RL fine-tuning with real BSM options mechanics.
 
     Args:
         model: ATLASModel (pre-trained via BC).
-        train_features: symbol -> (T, F) array of normalized features.
+        train_features: Legacy param, ignored. Data loaded from feature_dir/cache_dir.
         config: ATLASConfig.
         n_iterations: Number of PPO iterations.
         rollout_steps: Steps per rollout collection.
+        feature_dir: Directory containing *_features.npz files.
+        cache_dir: Directory containing *.parquet price files.
 
     Returns:
         Training history dict.
     """
     import os
     os.makedirs(checkpoint_dir, exist_ok=True)
+
+    if config is None:
+        config = ATLASConfig()
 
     if device == "auto":
         device = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -179,14 +681,19 @@ def train_ppo(
         model.parameters(), lr=config.lr, weight_decay=config.weight_decay,
     )
 
-    env = TradingEnvironment(train_features, config)
-    history = {"policy_loss": [], "value_loss": [], "entropy": [], "mean_reward": []}
+    print("Loading training data with BSM pricing support...", flush=True)
+    all_data = _load_training_data(feature_dir, cache_dir)
+    print(f"Loaded {len(all_data)} symbols for options RL training.", flush=True)
+
+    env = OptionsEnvironment(all_data, config)
+    history: dict[str, list[float]] = {
+        "policy_loss": [], "value_loss": [], "entropy": [], "mean_reward": [],
+    }
 
     for iteration in range(n_iterations):
-        # Collect rollout
         rollout = Rollout()
         obs = env.reset()
-        ep_rewards = []
+        ep_rewards: list[float] = []
 
         model.eval()
         for _ in range(rollout_steps):
@@ -197,6 +704,12 @@ def train_ppo(
                     inputs["month"], inputs["is_opex"], inputs["is_qtr"],
                     inputs["pre_mu"], inputs["pre_sigma"], inputs["rtg"],
                 )
+                if torch.isnan(action_mean).any():
+                    action_mean = torch.nan_to_num(action_mean, nan=0.0)
+                if torch.isnan(value).any():
+                    value = torch.nan_to_num(value, nan=0.0)
+                value = value.clamp(-100, 100)
+
                 dist = model.get_action_distribution(action_mean)
                 action = dist.sample()
                 log_prob = dist.log_prob(action).sum(-1)
@@ -258,16 +771,24 @@ def train_ppo(
                 mb_adv = advantages[mb_idx].to(device)
                 mb_ret = returns[mb_idx].to(device)
 
-                # Normalize advantages
                 mb_adv = (mb_adv - mb_adv.mean()) / (mb_adv.std() + 1e-8)
 
                 new_mean, new_val = model.forward_with_value(
                     mb_features, mb_ts, mb_dow, mb_month, mb_opex, mb_qtr,
                     mb_mu, mb_sigma, mb_rtg,
                 )
+                if torch.isnan(new_mean).any() or torch.isnan(new_val).any():
+                    optimizer.zero_grad()
+                    continue
+                new_val = new_val.clamp(-100, 100)
+
                 dist = model.get_action_distribution(new_mean)
                 new_lp = dist.log_prob(mb_actions).sum(-1)
                 entropy = dist.entropy().sum(-1).mean()
+
+                if torch.isnan(new_lp).any() or torch.isnan(entropy):
+                    optimizer.zero_grad()
+                    continue
 
                 ratio = (new_lp - mb_old_lp).exp()
                 clipped = torch.clamp(ratio, 1 - config.clip_eps, 1 + config.clip_eps)
@@ -295,10 +816,12 @@ def train_ppo(
         history["entropy"].append(avg_ent)
         history["mean_reward"].append(avg_rew)
 
-        if (iteration + 1) % 50 == 0 or iteration == 0:
+        if (iteration + 1) % 5 == 0 or iteration == 0:
             print(f"  PPO iter {iteration+1}/{n_iterations}: "
                   f"policy={avg_pl:.4f} value={avg_vl:.4f} "
-                  f"entropy={avg_ent:.4f} reward={avg_rew:.4f}")
+                  f"entropy={avg_ent:.4f} reward={avg_rew:.4f}",
+                  flush=True)
+        if (iteration + 1) % 25 == 0 or iteration == 0:
             torch.save({
                 "iteration": iteration,
                 "model_state_dict": model.state_dict(),
