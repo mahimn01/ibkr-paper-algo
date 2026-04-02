@@ -73,6 +73,8 @@ class OptionsEnvironment:
         self,
         all_data: dict[str, dict],
         config: ATLASConfig,
+        regime_filter: str = "all",
+        reward_shaping: str = "none",
     ) -> None:
         """
         Args:
@@ -88,25 +90,91 @@ class OptionsEnvironment:
                 "month": np.ndarray (int32),
             }
             config: ATLASConfig
+            regime_filter: "all", "high_iv", "uptrend", "crash"
+            reward_shaping: "none", "high_iv", "uptrend", "crash"
         """
         self.all_data = all_data
         self.config = config
+        self.regime_filter = regime_filter
+        self.reward_shaping = reward_shaping
         self.symbols = list(all_data.keys())
         self._episode_len = 500
+        self._eligible_episodes: list[tuple[str, int]] = []
+        self._build_eligible_episodes()
         self.reset()
 
-    def reset(self) -> dict[str, Tensor]:
-        sym = random.choice(self.symbols)
-        data = self.all_data[sym]
-        T = len(data["closes"])
-        max_ep_len = min(self._episode_len, T - self.config.context_len - 60)
-        if max_ep_len < 100:
-            max_ep_len = 100
+    def _build_eligible_episodes(self) -> None:
+        """Pre-compute list of (sym, start_idx) pairs that match the regime filter."""
+        if self.regime_filter == "all":
+            return
 
-        start = random.randint(
-            self.config.context_len,
-            max(self.config.context_len, T - max_ep_len - 1),
-        )
+        L = self.config.context_len
+        for sym, data in self.all_data.items():
+            closes = data["closes"]
+            iv_ranks = data["iv_ranks"]
+            ivs = data["ivs"]
+            T = len(closes)
+
+            max_ep_len = min(self._episode_len, T - L - 60)
+            if max_ep_len < 100:
+                continue
+
+            for start in range(L, max(L + 1, T - max_ep_len), 50):
+                end = min(start + max_ep_len, T - 1)
+                window_closes = closes[start:end]
+                window_iv_ranks = iv_ranks[start:end]
+                window_ivs = ivs[start:end]
+
+                if len(window_closes) < 30:
+                    continue
+
+                if self.regime_filter == "high_iv":
+                    mean_ivr = float(np.nanmean(window_iv_ranks))
+                    if mean_ivr > 60:
+                        self._eligible_episodes.append((sym, start))
+
+                elif self.regime_filter == "uptrend":
+                    if len(window_closes) >= 60:
+                        ret_60 = (window_closes[59] - window_closes[0]) / max(window_closes[0], 1e-8)
+                        sma50 = float(np.mean(window_closes[:50]))
+                        if ret_60 > 0.15 and window_closes[59] > sma50:
+                            self._eligible_episodes.append((sym, start))
+
+                elif self.regime_filter == "crash":
+                    log_rets = np.diff(np.log(np.maximum(window_closes[:30], 1e-8)))
+                    rv_30 = float(np.std(log_rets) * np.sqrt(252)) if len(log_rets) > 1 else 0.0
+                    ret_20 = (window_closes[min(19, len(window_closes) - 1)] - window_closes[0]) / max(window_closes[0], 1e-8) if len(window_closes) >= 20 else 0.0
+                    if rv_30 > 0.40 or ret_20 < -0.10:
+                        self._eligible_episodes.append((sym, start))
+
+        if not self._eligible_episodes:
+            for sym in self.symbols:
+                data = self.all_data[sym]
+                T = len(data["closes"])
+                max_ep_len = min(self._episode_len, T - L - 60)
+                if max_ep_len >= 100:
+                    mid = L + (T - L - max_ep_len) // 2
+                    self._eligible_episodes.append((sym, mid))
+
+    def reset(self) -> dict[str, Tensor]:
+        if self.regime_filter != "all" and self._eligible_episodes:
+            sym, start = random.choice(self._eligible_episodes)
+            data = self.all_data[sym]
+            T = len(data["closes"])
+            max_ep_len = min(self._episode_len, T - start - 1)
+            if max_ep_len < 100:
+                max_ep_len = 100
+        else:
+            sym = random.choice(self.symbols)
+            data = self.all_data[sym]
+            T = len(data["closes"])
+            max_ep_len = min(self._episode_len, T - self.config.context_len - 60)
+            if max_ep_len < 100:
+                max_ep_len = 100
+            start = random.randint(
+                self.config.context_len,
+                max(self.config.context_len, T - max_ep_len - 1),
+            )
         self._data = data
         self._sym = sym
         self._t = start
@@ -538,6 +606,22 @@ class OptionsEnvironment:
         if dd > 0.15:
             reward -= 0.5 * (dd - 0.15) ** 2
 
+        # --- Curriculum reward shaping bonuses ---
+        if self.reward_shaping != "none":
+            delta_raw = float(action[0])
+            direction_raw = float(action[1])
+            iv_rank_now = float(self._iv_ranks[self._t])
+
+            if self.reward_shaping == "high_iv":
+                if iv_rank_now > 60 and delta_raw > 0.25:
+                    reward += 0.5
+            elif self.reward_shaping == "uptrend":
+                if direction_raw > 0:
+                    reward += 0.3
+            elif self.reward_shaping == "crash":
+                if delta_raw < 0.10:
+                    reward += 1.0
+
         # Clip reward to prevent explosions
         reward = float(np.clip(reward, -5.0, 5.0))
 
@@ -580,6 +664,38 @@ def compute_gae(
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
+
+def load_training_data_v2(
+    feature_dir: str = "data/atlas_features_v2",
+    min_len: int = 400,
+) -> dict[str, dict]:
+    """Load pre-computed v2 features (which include closes/ivs/iv_ranks in the npz)."""
+    feature_path = Path(feature_dir)
+    all_data: dict[str, dict] = {}
+
+    for npz_file in sorted(feature_path.glob("*_features.npz")):
+        sym = npz_file.stem.replace("_features", "")
+        npz = np.load(npz_file)
+
+        closes = npz["closes"].astype(np.float64)
+        T = len(closes)
+        if T < min_len:
+            continue
+
+        all_data[sym] = {
+            "closes": closes,
+            "ivs": npz["ivs"].astype(np.float64),
+            "iv_ranks": npz["iv_ranks"].astype(np.float64),
+            "normed": npz["normed"],
+            "mu": npz["mu"],
+            "sigma": npz["sigma"],
+            "timestamps": npz["timestamps"],
+            "dow": npz["dow"],
+            "month": npz["month"],
+        }
+
+    return all_data
+
 
 def _load_training_data(
     feature_dir: str = "data/atlas_features",
@@ -651,6 +767,10 @@ def train_ppo(
     rollout_steps: int = 2048,
     feature_dir: str = "data/atlas_features",
     cache_dir: str = "data/atlas_cache",
+    regime_filter: str = "all",
+    reward_shaping: str = "none",
+    all_data_preloaded: dict[str, dict] | None = None,
+    optimizer: torch.optim.Optimizer | None = None,
 ) -> dict:
     """
     Phase 2: PPO RL fine-tuning with real BSM options mechanics.
@@ -663,6 +783,10 @@ def train_ppo(
         rollout_steps: Steps per rollout collection.
         feature_dir: Directory containing *_features.npz files.
         cache_dir: Directory containing *.parquet price files.
+        regime_filter: "all", "high_iv", "uptrend", "crash" — filter episodes by regime.
+        reward_shaping: "none", "high_iv", "uptrend", "crash" — apply bonus rewards.
+        all_data_preloaded: Pre-loaded data dict to avoid reloading across stages.
+        optimizer: Existing optimizer to reuse across curriculum stages.
 
     Returns:
         Training history dict.
@@ -677,15 +801,22 @@ def train_ppo(
         device = "mps" if torch.backends.mps.is_available() else "cpu"
     model = model.to(device).float()
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(), lr=config.lr, weight_decay=config.weight_decay,
-    )
+    if optimizer is None:
+        optimizer = torch.optim.AdamW(
+            model.parameters(), lr=config.lr, weight_decay=config.weight_decay,
+        )
 
-    print("Loading training data with BSM pricing support...", flush=True)
-    all_data = _load_training_data(feature_dir, cache_dir)
-    print(f"Loaded {len(all_data)} symbols for options RL training.", flush=True)
+    if all_data_preloaded is not None:
+        all_data = all_data_preloaded
+        print(f"Using pre-loaded data: {len(all_data)} symbols.", flush=True)
+    else:
+        print("Loading training data with BSM pricing support...", flush=True)
+        all_data = _load_training_data(feature_dir, cache_dir)
+        print(f"Loaded {len(all_data)} symbols for options RL training.", flush=True)
 
-    env = OptionsEnvironment(all_data, config)
+    env = OptionsEnvironment(all_data, config, regime_filter=regime_filter, reward_shaping=reward_shaping)
+    if regime_filter != "all":
+        print(f"  Regime filter: {regime_filter} ({len(env._eligible_episodes)} eligible episodes)", flush=True)
     history: dict[str, list[float]] = {
         "policy_loss": [], "value_loss": [], "entropy": [], "mean_reward": [],
     }
