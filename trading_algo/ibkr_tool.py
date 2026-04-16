@@ -1067,6 +1067,54 @@ def cmd_whatif(args: argparse.Namespace) -> int:
     return 0
 
 
+def _resolve_account(ib: IB, explicit: str | None) -> str:
+    """Pick the order account: --account > IBKR_ACCOUNT env > sole managed
+    account. Fail loudly if ambiguous (multiple accounts linked to login).
+
+    IBKR Error 435 ("You must specify an account") fires when an order
+    omits the account field on a multi-account login.
+    """
+    if explicit:
+        return explicit
+    env_acct = os.getenv("IBKR_ACCOUNT")
+    if env_acct:
+        return env_acct
+    managed = list(ib.managedAccounts() or [])
+    if len(managed) == 1:
+        return managed[0]
+    if not managed:
+        raise SystemExit("No managed accounts visible via managedAccounts().")
+    raise SystemExit(
+        f"Multiple accounts linked ({managed}). Specify --account <ID> "
+        f"or set IBKR_ACCOUNT env. IBKR rejects order submissions without "
+        f"an explicit account on multi-account logins (Error 435)."
+    )
+
+
+def _wait_for_order_ack(ib: IB, trade: Any, timeout: float = 15.0) -> bool:
+    """Block until the order reaches a stable state or times out.
+
+    Returns True if the order is live (Submitted/PreSubmitted/Filled) or
+    False if it was Cancelled/Inactive. Surfaces errors from trade.log.
+
+    Replaces the naive `ib.sleep(2.0)` which disconnected before IBKR
+    could deliver rejection notifications (Error 435, risk rejects, etc.).
+    """
+    terminal = {"Filled", "Cancelled", "ApiCancelled", "Inactive"}
+    stable_live = {"Submitted", "PreSubmitted"}
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        ib.waitOnUpdate(timeout=0.5)
+        status = trade.orderStatus.status
+        if status in terminal or status in stable_live:
+            break
+    # Surface any errors recorded on the trade log.
+    errors = [e for e in trade.log if e.errorCode]
+    for e in errors:
+        print(f"IBKR Error {e.errorCode}: {e.message}", file=sys.stderr)
+    return trade.orderStatus.status not in ("Cancelled", "ApiCancelled", "Inactive")
+
+
 def cmd_place(args: argparse.Namespace) -> int:
     if not args.yes:
         raise SystemExit("Refusing to place live order without --yes confirmation flag.")
@@ -1074,11 +1122,14 @@ def cmd_place(args: argparse.Namespace) -> int:
     c = _build_contract(args)
     ib.qualifyContracts(c)
     o = _build_order(args)
+    o.account = _resolve_account(ib, o.account or None)
     trade = ib.placeOrder(c, o)
-    ib.sleep(2.0)
-    _emit(_order_dict(trade), args.format)
+    ok = _wait_for_order_ack(ib, trade, timeout=float(args.wait_timeout))
+    out = _order_dict(trade)
+    out["account"] = o.account
+    _emit(out, args.format)
     ib.disconnect()
-    return 0
+    return 0 if ok else 1
 
 
 def cmd_combo(args: argparse.Namespace) -> int:
@@ -1102,16 +1153,18 @@ def cmd_combo(args: argparse.Namespace) -> int:
     if args.limit_price is not None:
         o.lmtPrice = float(args.limit_price)
     o.tif = args.tif
-    if args.account:
-        o.account = args.account
+    o.account = _resolve_account(ib, args.account)
+    if args.order_ref:
+        o.orderRef = args.order_ref
     o.transmit = not args.no_transmit
     trade = ib.placeOrder(bag, o)
-    ib.sleep(2.0)
+    ok = _wait_for_order_ack(ib, trade, timeout=float(args.wait_timeout))
     out = _order_dict(trade)
     out["legs"] = [(l.action, l.conId, l.ratio) for l in legs]
+    out["account"] = o.account
     _emit(out, args.format)
     ib.disconnect()
-    return 0
+    return 0 if ok else 1
 
 
 def cmd_cancel(args: argparse.Namespace) -> int:
@@ -1423,6 +1476,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_contract_args(s)
     _add_order_args(s)
     s.add_argument("--yes", action="store_true", help="Required live confirmation flag")
+    s.add_argument("--wait-timeout", type=float, default=15.0, help="Seconds to wait for order ack (default 15)")
 
     s = add("combo", cmd_combo, "Place multi-leg BAG combo order")
     s.add_argument("--symbol", required=True)
@@ -1431,6 +1485,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--legs", required=True, help="ACTION:conId:ratio,ACTION:conId:ratio,...")
     _add_order_args(s)
     s.add_argument("--yes", action="store_true")
+    s.add_argument("--wait-timeout", type=float, default=15.0, help="Seconds to wait for order ack (default 15)")
 
     s = add("cancel", cmd_cancel, "Cancel one order by orderId")
     s.add_argument("--order-id", type=int, required=True)
