@@ -1,36 +1,34 @@
 # trading-algo
 
-Multi-strategy quant trading system I've been building for a while. Runs on US stocks through Interactive Brokers, and on crypto through Binance, Kraken, and Hyperliquid. Runs a bunch of strategies at once, has its own backtester, and can go live through IBKR with heavy safety wiring in the way.
+Multi-strategy quant trading system. US stocks through Interactive Brokers, crypto through Binance/Kraken/Hyperliquid. Runs strategies in parallel, has its own backtester, goes live through IBKR with safety gates.
 
 ## What's inside
 
-The equity side has around a dozen strategies that all plug into one controller. Momentum, mean reversion, cointegrated pairs, opening range breakout, flow-pressure patterns, regime transitions, Hurst-based adaptive allocation, and a few more. The controller blends their signals, resolves conflicts, sizes positions, and enforces risk limits.
+| Piece | Where | What it does |
+|---|---|---|
+| Equity strategies | `trading_algo/multi_strategy/` | ~12 strategies plugged into one controller (momentum, mean reversion, pairs, ORB, flow, regime, Hurst, and more) |
+| Crypto edges | `crypto_alpha/edges/` | 9 structural edges on perp futures (funding, basis, cross-exchange, intermarket cascades) |
+| Options strategies | `trading_algo/quant_core/strategies/options/` | wheel, PMCC, enhanced wheel, jade lizard, portfolio wheel, hybrid regime, put spreads |
+| ATLAS | `trading_algo/quant_core/models/atlas/` | Deep-RL trader, Mamba + cross-attention, PPO + EWC (v7) |
+| IBKR data/ops CLI | `trading_algo/ibkr_tool.py` | ~46 commands for quotes, chains, depth, history, scanners, orders, what-if calcs |
+| Flex CLI | `trading_algo/flex_tool.py` | ~31 commands for Flex Web Service (statements, P&L, cash, dividends) |
+| Gemini trader | `trading_algo/llm/` | Chat and trader loop. Stopped driving trades through it because literature doesn't back LLM trading signals |
+| RAT | `trading_algo/rat/` | Experimental research (reflexivity, attention topology, adversarial algo detection) |
 
-The crypto side has nine edges aimed at perpetual futures. Most are structural (funding rate dynamics, perp-spot basis mean reversion, cross-exchange price lag, intermarket cascades from BTC leading ETH leading alts, that sort of thing). Being honest, only three of the nine have positive standalone Sharpe. The other six exist because I wanted to test whether you could stack uncorrelated negative-SR edges into something useful. You can't really, but the tests had to happen.
+## Backtester
 
-There are options income strategies in there too. Wheel, PMCC, enhanced wheel, jade lizard, portfolio wheel, hybrid regime, defined-risk put spreads. They all run on the same backtester and can go live through IBKR.
+The whole system is worthless if the backtests lie, so it got a lot of attention.
 
-ATLAS is an experimental deep-RL trader with a Mamba state-space backbone and cross-attention, trained with PPO and EWC on curriculum episodes. Currently v7. Lives in `trading_algo/quant_core/models/atlas/`, with training scripts in `scripts/atlas_*.py`.
+- Signals on bar N fill at bar N+1 open (no same-bar look-ahead)
+- VWAP tracking when adding to existing positions
+- Backward-only data lookups
+- Realistic commissions (~$0.0035/share) and slippage (2bps)
+- Walk-forward validation across sequential folds
+- Overfitting checked with PBO, deflated Sharpe, and White's reality check
 
-On the tooling side there are two big IBKR CLIs. `trading_algo.ibkr_tool` covers around 46 commands across IBKR's API. Quotes for stocks and options, option chains, depth of book, historical bars, tick data, fundamentals, news, market scanners, order placement, what-if margin calculations. `trading_algo.flex_tool` does the Flex Web Service side. Account statements, trades, P&L rolled up by symbol or account, cash reports, commissions, dividends, transfers. Both output json, csv, or a plain table.
+The crypto runner adds funding settlement at the correct UTC hours, leverage tracking, liquidation simulation with a 0.5% penalty, and 365-day annualization. There's also a fraud detection suite that runs null tests. Random signals should give Sharpe near zero, reversed signals should flip the PnL, doubled costs should crush the edges, and single-asset isolation shows where alpha actually comes from. If any fail, the infrastructure is lying.
 
-There's a Gemini chat and trader loop in `trading_algo/llm/`. I used to drive live trades through it directly. I stopped because the research on LLM-generated trading signals just isn't there yet. The chat side still works if you want to ask the model for market context or poke at positions.
-
-RAT ("Reflexive Attention Topology") is experimental research code. Attention tracking, Soros-style reflexivity detection via Granger causality, topological regime classification, adversarial algo fingerprinting, alpha decay monitoring. Mostly a playground for ideas I wanted to try.
-
-## How honest the backtester is
-
-This got a lot of attention because the whole system is worthless if the backtests lie.
-
-Signals generated on bar N fill at the open of bar N+1, so there's no same-bar look-ahead. When you add to an existing position in the same direction, the entry price becomes the VWAP of all fills, not the latest one. All data lookups (prices, funding rates, open interest) go backward in time only. Commissions and slippage are realistic, around $0.0035 per share and 2 basis points. Walk-forward validation runs sequential folds and wants less than 30% in-sample to out-of-sample degradation before it accepts a config. Overfitting gets checked with PBO and deflated Sharpe (which accounts for multiple testing), plus White's reality check.
-
-The crypto runner adds a few things on top. Funding settles at the correct UTC hours. Leverage is tracked properly. Liquidations get simulated with a 0.5% penalty. Returns annualize on 365 days instead of 252.
-
-There's also a fraud detection suite for the crypto side. Random signals should produce Sharpe near zero once costs are subtracted. Reversed signals should flip the sign of PnL. Doubling the costs should crush the edges. Single-asset isolation should show where alpha is coming from. If any of those tests fail, the infrastructure is lying and the rest of the numbers don't matter.
-
-## Running it
-
-Python 3.11+. Install and you're set.
+## Install
 
 ```bash
 python3 -m venv .venv
@@ -38,93 +36,64 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Ten-year equity backtest.
+## Run
 
-```bash
-python scripts/run_10yr_backtest.py
-```
+| Command | What it does |
+|---|---|
+| `python scripts/run_10yr_backtest.py` | 10-year equity backtest |
+| `python crypto_alpha/scripts/deep_analysis.py` | Crypto deep analysis |
+| `python crypto_alpha/scripts/fraud_detection.py` | Crypto fraud tests |
+| `python scripts/validate_edge.py --symbols NQ,ES --fetch` | Edge validation (ORB, gap fade, VWAP) |
+| `python run.py --paper` | Paper trading via IB Gateway (port 4002) |
+| `python run.py --live` | Live trading, after clearing safety gates |
 
-Crypto deep analysis.
+Results land in `backtest_results/`.
 
-```bash
-python crypto_alpha/scripts/deep_analysis.py
-```
+## Live trading safety
 
-Crypto fraud detection.
+Every gate has to clear before an order transmits.
 
-```bash
-python crypto_alpha/scripts/fraud_detection.py
-```
+| Gate | Requirement |
+|---|---|
+| `TRADING_ALLOW_LIVE` | Must be `true` in env |
+| `--allow-live` | Must be on the command line |
+| Paper-only enforcement | Must be explicitly disabled |
+| Per-order confirmation | Type `YES` at the terminal for every place/modify/cancel/bracket |
+| Confirmation callback | Must be wired into the CLI, otherwise orders get blocked outright |
 
-Edge validation for ORB, gap fade, and VWAP patterns on futures.
+Most of my live trading runs through IB Gateway via IBC in tmux, with `AutoRestartTime=23:55` so it survives IBKR's nightly disconnect. Paper and live can run on different ports at the same time.
 
-```bash
-python scripts/validate_edge.py --symbols NQ,ES --fetch
-```
+## Latest results (V11 config)
 
-Results land in `backtest_results/` as text reports, JSON, equity curves, and monthly breakdowns.
+| System | Sharpe | Return | Max DD | Period |
+|---|---|---|---|---|
+| Equity V11 | 0.48 | +151.3% | 18.5% | 2016–2026 |
+| Crypto 9-edge | 0.28 | +7.7% | 21.8% | 2022–2026 |
 
-## Going live
+Equity has DSR 16 with p ≈ 0, OOS Sharpe 0.55, alpha vs SPY around 4% annualized, beta 0.12.
 
-Run paper first. Paper goes through IB Gateway on port 4002.
-
-```bash
-python run.py --paper
-```
-
-For live, you have to clear a few gates. `TRADING_ALLOW_LIVE` has to be true in the environment. `--allow-live` has to be on the command line. Paper-only enforcement has to be explicitly disabled. Every order (place, modify, cancel, bracket) prompts you to type `YES` at the terminal before anything transmits. If no confirmation callback is wired into the CLI, orders get blocked outright.
-
-```bash
-python run.py --live
-```
-
-Most of my live trading runs through IB Gateway via IBC inside tmux, with AutoRestartTime set to 23:55 so the gateway comes back up through IBKR's nightly disconnect. Paper and live can run simultaneously on their own ports if you want to paper-test a new strategy while existing positions stay live.
-
-## Latest equity results (V11 config)
-
-Sharpe 0.48. Total return 151.3% over ten years (2016 to 2026). Max drawdown 18.5%. Five strategies on seven symbols with vol-gated intraday signals. Deflated Sharpe is 16 with p ≈ 0. Out-of-sample Sharpe is 0.55. Alpha versus SPY is about 4% annualized. Beta is 0.12.
-
-Crypto is rougher. Sharpe 0.28. Return 7.7% over four years (2022 to 2026). Max drawdown 21.8%. That's below BTC buy-and-hold's 0.80 Sharpe, which is fine. I'm not trying to beat hodling BTC, I'm trying to generate uncorrelated PnL. Only three of the nine edges are positive as standalones. IMC (+0.72), CED (+0.40), PBMR (+0.33).
-
-## Things I've learned
-
-Vol targeting beats Kelly for position sizing. Vol is maybe ten times easier to forecast than returns, and sizing by inverse vol sidesteps the whole "my edge estimates are wrong" problem.
-
-Intraday signals are a high-vol regime thing. In low-vol they actively hurt you. Gating on 20-day annualized vol above 15% cleans that up.
-
-Simple vol thresholds catch most of what a full HMM regime classifier gives you. The last sliver of accuracy isn't worth the complexity.
-
-Alpha decay is real and public. Academic anomalies decay about a third post-publication (McLean & Pontiff, 2016). Structural edges like momentum and funding arb survive. Pure statistical patterns mostly don't.
-
-Out of 120 published anomalies, fewer than 15 survive realistic transaction costs (Novy-Marx & Velikov, 2016). Most published alpha is dead on arrival once real costs are in, which is why backtests need honest slippage baked in from the start.
-
-Don't roll a working short option. Cycling shorter-dated shorts captures more per-day theta than one long-dated short. The math is in `CLAUDE.md`. Only roll defensively (short goes ITM, delta past 0.40, IV spike, gap against you, or margin needed elsewhere).
+Crypto lags BTC buy-and-hold (0.80 Sharpe). Only three edges are positive as standalones. IMC (+0.72), CED (+0.40), PBMR (+0.33).
 
 ## Known issues
 
-The crypto system underperforms BTC buy-and-hold. I know. It's a diversification play, not a BTC replacement, but the headline comparison looks worse than it really is.
-
-`_strategy_positions` in the controller never gets populated, so per-strategy position limits are dormant. Something to fix.
-
-Equity trailing stops are off in V11 because they hurt Sharpe on every config I tested. I'll turn them back on if I find a better trigger.
-
-Crypto funding data has gaps depending on which exchange API it pulls from. Usually minor but worth knowing.
-
-ATLAS v7 training needs the R3000 dataset, which isn't shipped in the repo.
-
-Edge validation wants `pandas>=2.0.0` and `statsmodels>=0.14.0`.
+- Crypto system lags BTC buy-and-hold (it's a diversification play, not a replacement)
+- `_strategy_positions` in the controller never gets populated, so per-strategy position limits are dormant
+- V11 has trailing stops off (they hurt Sharpe on every config I tested)
+- Crypto funding data has gaps depending on which exchange API it pulls from
+- ATLAS v7 training needs the R3000 dataset, not shipped in the repo
+- Edge validation wants `pandas>=2.0.0` and `statsmodels>=0.14.0`
 
 ## Docs
 
-More detail lives in `docs/`.
+`docs/` has more detail.
 
-- `ARCHITECTURE.md` is the deep dive
-- `SAFETY.md` is the full live-trading safety model
-- `LLM_TRADER.md` covers the Gemini loop and chat interface
-- `WORKFLOWS.md` is the day-to-day
-- `DB_SCHEMA.md` is the sqlite audit schema
-- `TRADITIONAL_VS_AI_TRADING_VERDICT.md` is why the LLM direction got shelved
-- `HOW_LLMS_WERE_USED_IN_RESEARCH.md` is a critique of LLM-assisted alpha discovery papers
-- `CLAUDE.md` at the repo root has the non-negotiable trading rules
+- `ARCHITECTURE.md`, deep dive
+- `SAFETY.md`, full live-trading safety model
+- `LLM_TRADER.md`, Gemini loop and chat
+- `WORKFLOWS.md`, day-to-day workflows
+- `DB_SCHEMA.md`, sqlite audit schema
+- `TRADITIONAL_VS_AI_TRADING_VERDICT.md`, why the LLM direction got shelved
+- `HOW_LLMS_WERE_USED_IN_RESEARCH.md`, critique of LLM alpha discovery papers
+- `CLAUDE.md` at the repo root, non-negotiable trading rules
 
 `CHANGELOG.md` has the full commit history.
