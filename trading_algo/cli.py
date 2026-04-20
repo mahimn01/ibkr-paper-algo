@@ -1291,6 +1291,169 @@ def _maybe_project_and_summarize(
     return rows
 
 
+def _cmd_stream(args: argparse.Namespace) -> int:
+    """Stream market-data snapshots as NDJSON to stdout (and optionally
+    a buffer file) until `--duration` expires or SIGINT.
+
+    This is a poll-based stream — each tick is one broker snapshot,
+    rate-limited by `--every` seconds and by the IBKR rate-limit layer.
+    For turn-based agents it's cheaper than an open WebSocket:
+
+      - Fire `stream --buffer-to ticks.ndjson --duration 60` in a
+        subprocess.
+      - When the turn ends, use `tail-ticks --file ticks.ndjson
+        --from-seq N` to consume only the newly-appended ticks.
+
+    Each emitted line carries `_seq` (monotonic) and `_ts_epoch_ms` so
+    downstream consumers can dedupe / resume cleanly.
+    """
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    import time as _time
+    from trading_algo.exit_codes import TIMEOUT
+
+    cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
+    broker = _make_broker(args.broker, cfg)
+    broker.connect()
+
+    interval = max(0.2, float(args.every))
+    duration = float(args.duration)
+    deadline = _time.monotonic() + duration if duration > 0 else float("inf")
+
+    instrument = validate_instrument(
+        InstrumentSpec(
+            kind=args.kind, symbol=args.symbol,
+            exchange=args.exchange, currency=args.currency,
+            expiry=args.expiry, right=getattr(args, "right", None),
+            strike=(float(args.strike) if getattr(args, "strike", None) is not None else None),
+            multiplier=getattr(args, "multiplier", None),
+        )
+    )
+
+    buf_fh = None
+    if getattr(args, "buffer_to", None):
+        from pathlib import Path
+        p = Path(args.buffer_to)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        buf_fh = open(p, "a", encoding="utf-8", buffering=1)  # line-buffered
+
+    seq = 0
+    try:
+        while _time.monotonic() < deadline:
+            try:
+                snap = broker.get_market_data_snapshot(instrument)
+                seq += 1
+                payload = {
+                    "_seq": seq,
+                    "_ts_epoch_ms": int(_time.time() * 1000),
+                    "symbol": snap.instrument.symbol,
+                    "bid": snap.bid, "ask": snap.ask, "last": snap.last,
+                    "close": snap.close, "volume": snap.volume,
+                    "timestamp_epoch_s": snap.timestamp_epoch_s,
+                }
+                line = json.dumps(payload, default=str, ensure_ascii=False)
+                print(line, flush=True)
+                if buf_fh is not None:
+                    buf_fh.write(line + "\n")
+            except Exception as exc:
+                logging.getLogger(__name__).warning("stream tick failed: %s", exc)
+            remaining = deadline - _time.monotonic()
+            if remaining <= 0:
+                break
+            _time.sleep(min(interval, remaining))
+        return 0
+    finally:
+        if buf_fh is not None:
+            try:
+                buf_fh.close()
+            except Exception:
+                pass
+        try:
+            broker.disconnect()
+        except Exception:
+            pass
+
+
+def _cmd_tail_ticks(args: argparse.Namespace) -> int:
+    """Read ticks from a `stream --buffer-to` file, optionally starting
+    at `--from-seq` and limiting to `--max` lines.
+
+    No broker call. Safe to run concurrently with the producer — the
+    buffer file is line-buffered.
+    """
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    from pathlib import Path
+
+    path = Path(args.file)
+    if not path.exists():
+        _emit_t2_json({"count": 0, "ticks": []}, cmd="tail-ticks")
+        return 0
+    from_seq = int(getattr(args, "from_seq", 0) or 0)
+    max_n = getattr(args, "max", None)
+
+    matching: list[dict] = []
+    with open(path, "r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            seq = entry.get("_seq", 0)
+            if seq > from_seq:
+                matching.append(entry)
+    if max_n is not None:
+        matching = matching[-int(max_n):]
+    last_seq = matching[-1].get("_seq") if matching else from_seq
+    _emit_t2_json(
+        {"count": len(matching), "last_seq": last_seq, "ticks": matching},
+        cmd="tail-ticks",
+    )
+    return 0
+
+
+def _cmd_groups_list(args: argparse.Namespace) -> int:
+    """List distinct groups observed in the OMS DB."""
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
+    if not cfg.db_path:
+        raise SystemExit("groups-list requires TRADING_DB_PATH to be set")
+    store = SqliteStore(cfg.db_path)
+    try:
+        groups = store.list_groups()
+    finally:
+        store.close()
+    _emit_t2_json({"count": len(groups), "groups": groups}, cmd="groups-list")
+    return 0
+
+
+def _cmd_groups_show(args: argparse.Namespace) -> int:
+    """Show every order in a given group_id."""
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
+    if not cfg.db_path:
+        raise SystemExit("groups-show requires TRADING_DB_PATH to be set")
+    store = SqliteStore(cfg.db_path)
+    try:
+        orders = store.orders_by_group(args.group_id)
+    finally:
+        store.close()
+    _emit_t2_json(
+        {"group_id": args.group_id, "count": len(orders), "orders": orders},
+        cmd="groups-show",
+    )
+    return 0
+
+
 def _cmd_reconcile(args: argparse.Namespace) -> int:
     """Reconcile OMS's view of open orders with broker's live openTrades().
 
@@ -1676,6 +1839,60 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit JSONSchema for every subcommand — agents build tool-call specs from this",
     )
     td_p.set_defaults(func=_cmd_tools_describe)
+
+    # --- T4.2: order groups ---
+    gl_p = sub.add_parser(
+        "groups-list",
+        help="List distinct group_ids in the OMS DB (baskets, bracket legs, etc.)",
+    )
+    gl_p.add_argument("--explain", action="store_true",
+                      help="Print explanation and exit 0 without running")
+    gl_p.set_defaults(func=_cmd_groups_list)
+
+    gs_p = sub.add_parser(
+        "groups-show",
+        help="Show every order in a given group_id",
+    )
+    gs_p.add_argument("--group-id", required=True, dest="group_id")
+    gs_p.add_argument("--explain", action="store_true",
+                      help="Print explanation and exit 0 without running")
+    gs_p.set_defaults(func=_cmd_groups_show)
+
+    # --- T4.3: stream / tail-ticks ---
+    stream_p = sub.add_parser(
+        "stream",
+        help="Poll market-data snapshots and emit NDJSON ticks (optionally to a buffer file)",
+    )
+    stream_p.add_argument("--broker", choices=["ibkr", "sim"], default="ibkr")
+    stream_p.add_argument("--symbol", required=True)
+    stream_p.add_argument("--kind", choices=["STK", "FUT", "FX", "OPT"], default="STK")
+    stream_p.add_argument("--exchange", default=None)
+    stream_p.add_argument("--currency", default=None)
+    stream_p.add_argument("--expiry", default=None)
+    stream_p.add_argument("--right", choices=["C", "P"], default=None)
+    stream_p.add_argument("--strike", default=None)
+    stream_p.add_argument("--multiplier", default=None)
+    stream_p.add_argument("--every", type=float, default=1.0,
+                          help="Poll interval seconds (min 0.2)")
+    stream_p.add_argument("--duration", type=float, default=60.0,
+                          help="Stream duration seconds; <=0 means forever (SIGINT to stop)")
+    stream_p.add_argument("--buffer-to", dest="buffer_to", default=None,
+                          help="Append NDJSON ticks to this file (created if missing)")
+    stream_p.add_argument("--explain", action="store_true",
+                          help="Print explanation and exit 0 without running")
+    stream_p.set_defaults(func=_cmd_stream)
+
+    tt_p = sub.add_parser(
+        "tail-ticks",
+        help="Read a stream --buffer-to file; emit only ticks after --from-seq (no broker call)",
+    )
+    tt_p.add_argument("--file", required=True, help="Path to an NDJSON buffer produced by `stream --buffer-to`")
+    tt_p.add_argument("--from-seq", dest="from_seq", type=int, default=0,
+                      help="Only include ticks with _seq > this value")
+    tt_p.add_argument("--max", type=int, default=None, help="Cap at the last N matching ticks")
+    tt_p.add_argument("--explain", action="store_true",
+                      help="Print explanation and exit 0 without running")
+    tt_p.set_defaults(func=_cmd_tail_ticks)
 
     # --- kill switch (halt / resume) ---
     halt_p = sub.add_parser(
