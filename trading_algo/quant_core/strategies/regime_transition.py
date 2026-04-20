@@ -144,7 +144,7 @@ class TransitionConfig:
         min_signal_strength: Minimum absolute signal strength to act on.
             Filters out noise near zero.
     """
-    transition_threshold: float = 0.05
+    transition_threshold: float = 0.25
     velocity_threshold: float = 0.005
     velocity_window: int = 5
     max_holding_days: int = 20
