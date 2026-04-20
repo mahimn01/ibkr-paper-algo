@@ -913,6 +913,474 @@ def _cmd_wheel_live(args: argparse.Namespace) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# T2.5 — watch / status / time (agent-ergonomics surface)
+# ---------------------------------------------------------------------------
+
+def _emit_t2_json(data: dict, cmd: str) -> None:
+    """Emit a single JSON blob. No envelope here — the cli_runner wraps
+    structured errors, but these commands already print JSON directly.
+    """
+    print(json.dumps(data, indent=2, default=str, ensure_ascii=False))
+
+
+def _us_market_hours_et(now_et) -> dict:
+    """Static US equity market hours in ET. Does not account for
+    half-days (early close 13:00 ET) — that's a T3 concern.
+    """
+    date = now_et.date().isoformat()
+    return {
+        "nyse_nasdaq_open_et": f"{date}T09:30:00",
+        "nyse_nasdaq_close_et": f"{date}T16:00:00",
+        "cboe_options_open_et": f"{date}T09:30:00",
+        "cboe_options_close_et": f"{date}T16:00:00",
+        "globex_es_nq_open_et": f"{date}T18:00:00",  # Sun open; daily break 17-18
+        "globex_es_nq_close_et": f"{date}T17:00:00",
+    }
+
+
+def _is_us_equity_market_open(now_et) -> bool:
+    """Strict regular-session check, Mon–Fri 09:30–16:00 ET.
+    Holidays are a TODO — this is a best-effort heuristic."""
+    if now_et.weekday() >= 5:  # Sat/Sun
+        return False
+    mins = now_et.hour * 60 + now_et.minute
+    return 9 * 60 + 30 <= mins < 16 * 60
+
+
+def _cmd_watch(args: argparse.Namespace) -> int:
+    """Poll a named resource every N seconds; exit 0 with the snapshot when
+    `--until EXPR` evaluates True; exit 124 if the deadline elapses first.
+
+    Resources:
+      quote   --symbol AAPL         → bid/ask/last/close/volume
+      order   --order-id 12345      → latest order status
+      position --symbol AAPL        → latest broker position snapshot
+
+    EXPR is a restricted Python expression evaluated against the snapshot
+    dict (see watch_expr.py). Examples:
+      --until "last > 150"
+      --until "status == 'Filled'"
+      --until "filled_quantity >= 100"
+    """
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    import time as _time
+    from trading_algo.exit_codes import TIMEOUT
+    from trading_algo.watch_expr import UnsafeExpression, evaluate
+
+    resource: str = args.resource
+    interval = max(0.2, float(args.every))
+    timeout = float(args.timeout)
+    deadline = _time.monotonic() + timeout if timeout > 0 else float("inf")
+
+    # Pre-validate --until so a typo doesn't waste polls.
+    try:
+        evaluate(args.until, {})
+    except UnsafeExpression as exc:
+        print(f"ERROR: unsafe --until expression: {exc}", file=sys.stderr)
+        return 2
+    except SyntaxError as exc:
+        print(f"ERROR: --until does not parse: {exc}", file=sys.stderr)
+        return 2
+    except Exception:
+        # Tolerated — may only succeed once a field is bound.
+        pass
+
+    cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
+    broker = _make_broker(args.broker, cfg)
+    broker.connect()
+
+    def _fetch_quote() -> dict:
+        instrument = validate_instrument(
+            InstrumentSpec(
+                kind=args.kind,
+                symbol=args.symbol,
+                exchange=args.exchange,
+                currency=args.currency,
+                expiry=args.expiry,
+                right=getattr(args, "right", None),
+                strike=(float(args.strike) if getattr(args, "strike", None) is not None else None),
+                multiplier=getattr(args, "multiplier", None),
+            )
+        )
+        snap = broker.get_market_data_snapshot(instrument)
+        return {
+            "symbol": snap.instrument.symbol,
+            "bid": snap.bid,
+            "ask": snap.ask,
+            "last": snap.last,
+            "close": snap.close,
+            "volume": snap.volume,
+            "timestamp_epoch_s": snap.timestamp_epoch_s,
+        }
+
+    def _fetch_order() -> dict:
+        oid = int(args.order_id)
+        statuses = broker.get_order_statuses() if hasattr(broker, "get_order_statuses") else {}
+        row = statuses.get(oid) or statuses.get(str(oid)) or {}
+        return {
+            "order_id": oid,
+            "status": row.get("status"),
+            "filled": row.get("filled"),
+            "remaining": row.get("remaining"),
+            "avg_fill_price": row.get("avg_fill_price") or row.get("avgFillPrice"),
+        }
+
+    def _fetch_position() -> dict:
+        positions = broker.get_positions() if hasattr(broker, "get_positions") else []
+        for p in positions or []:
+            sym = p.get("symbol") if isinstance(p, dict) else getattr(p, "symbol", None)
+            if sym == args.symbol:
+                if isinstance(p, dict):
+                    return {"symbol": sym, **p}
+                return {
+                    "symbol": sym,
+                    "position": getattr(p, "position", None),
+                    "avg_cost": getattr(p, "avg_cost", None),
+                    "market_value": getattr(p, "market_value", None),
+                    "unrealized_pnl": getattr(p, "unrealized_pnl", None),
+                }
+        return {"symbol": args.symbol, "position": 0}
+
+    fetchers = {"quote": _fetch_quote, "order": _fetch_order, "position": _fetch_position}
+    fetch = fetchers.get(resource)
+    if fetch is None:
+        broker.disconnect()
+        print(f"ERROR: unknown watch resource: {resource!r}", file=sys.stderr)
+        return 2
+
+    last_snapshot: dict = {}
+    polls = 0
+    try:
+        while _time.monotonic() < deadline:
+            try:
+                last_snapshot = fetch()
+            except Exception as exc:
+                logging.getLogger(__name__).warning("watch poll failed: %s", exc)
+            polls += 1
+            try:
+                if evaluate(args.until, last_snapshot):
+                    _emit_t2_json(
+                        {
+                            "matched": True,
+                            "polls": polls,
+                            "snapshot": last_snapshot,
+                            "expression": args.until,
+                        },
+                        cmd="watch",
+                    )
+                    return 0
+            except Exception as exc:
+                logging.getLogger(__name__).debug("watch eval failed: %s", exc)
+            remaining = deadline - _time.monotonic()
+            if remaining <= 0:
+                break
+            _time.sleep(min(interval, remaining))
+    finally:
+        try:
+            broker.disconnect()
+        except Exception:
+            pass
+
+    _emit_t2_json(
+        {
+            "matched": False,
+            "polls": polls,
+            "snapshot": last_snapshot,
+            "expression": args.until,
+            "reason": "timeout",
+        },
+        cmd="watch",
+    )
+    return TIMEOUT
+
+
+def _cmd_status(args: argparse.Namespace) -> int:
+    """One JSON blob summarising the state of the world for an agent loop:
+    broker connectivity, config (paper/live/dry-run), halt state, market
+    hours, open-orders/positions counts. Each section independent — a
+    missing section becomes null instead of failing the whole call.
+    """
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    from datetime import datetime, timezone
+    try:
+        from zoneinfo import ZoneInfo
+        et = ZoneInfo("America/New_York")
+    except Exception:
+        et = timezone.utc  # fallback
+
+    now_utc = datetime.now(tz=timezone.utc)
+    now_et = now_utc.astimezone(et)
+
+    cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
+
+    # Broker section ------------------------------------------------------
+    broker_block: dict = {
+        "kind": args.broker,
+        "host": cfg.ibkr.host,
+        "port": cfg.ibkr.port,
+        "client_id": cfg.ibkr.client_id,
+        "connected": None,
+        "paper": cfg.ibkr.port == 4002,
+    }
+    account_block: dict = {
+        "net_liquidation": None,
+        "buying_power": None,
+        "open_orders": None,
+        "open_positions": None,
+    }
+    if args.broker == "ibkr" and not getattr(args, "skip_broker", False):
+        try:
+            broker = _make_broker(args.broker, cfg)
+            broker.connect()
+            broker_block["connected"] = True
+            try:
+                acct = broker.get_account_summary() if hasattr(broker, "get_account_summary") else {}
+                account_block["net_liquidation"] = acct.get("NetLiquidation")
+                account_block["buying_power"] = acct.get("BuyingPower")
+            except Exception:
+                pass
+            try:
+                orders = broker.get_open_orders() if hasattr(broker, "get_open_orders") else []
+                account_block["open_orders"] = len(orders or [])
+            except Exception:
+                pass
+            try:
+                positions = broker.get_positions() if hasattr(broker, "get_positions") else []
+                account_block["open_positions"] = sum(
+                    1 for p in (positions or [])
+                    if (p.get("position") if isinstance(p, dict) else getattr(p, "position", 0)) not in (0, None)
+                )
+            except Exception:
+                pass
+            broker.disconnect()
+        except Exception as exc:
+            broker_block["connected"] = False
+            broker_block["error"] = f"{type(exc).__name__}: {exc}"
+
+    # Market section ------------------------------------------------------
+    market_block = {
+        "et_now": now_et.isoformat(timespec="seconds"),
+        "utc_now": now_utc.isoformat(timespec="seconds"),
+        "weekday": now_et.strftime("%A"),
+        "us_equity_regular_session_open": _is_us_equity_market_open(now_et),
+        **_us_market_hours_et(now_et),
+    }
+
+    # Config section ------------------------------------------------------
+    config_block = {
+        "dry_run": cfg.dry_run,
+        "live_enabled": cfg.live_enabled,
+        "allow_live": cfg.allow_live,
+        "require_paper": cfg.require_paper,
+        "confirm_token_required": cfg.confirm_token_required,
+        "poll_seconds": cfg.poll_seconds,
+        "db_path": cfg.db_path or None,
+    }
+
+    # Halt section --------------------------------------------------------
+    from trading_algo.halt import read_halt
+    halt_state = read_halt()
+    halt_block: dict = {"is_halted": halt_state is not None}
+    if halt_state is not None:
+        halt_block.update(halt_state.to_dict())
+
+    out = {
+        "broker": broker_block,
+        "account": account_block,
+        "market": market_block,
+        "config": config_block,
+        "halt": halt_block,
+    }
+    _emit_t2_json(out, cmd="status")
+    return 0
+
+
+def _cmd_time(args: argparse.Namespace) -> int:
+    """Emit all the clocks an agent needs to plan actions. No broker call."""
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    from datetime import datetime, timezone
+    try:
+        from zoneinfo import ZoneInfo
+        et = ZoneInfo("America/New_York")
+    except Exception:
+        et = timezone.utc
+
+    now_utc = datetime.now(tz=timezone.utc)
+    now_et = now_utc.astimezone(et)
+    out = {
+        "utc_now": now_utc.isoformat(timespec="seconds"),
+        "et_now": now_et.isoformat(timespec="seconds"),
+        "et_date": now_et.date().isoformat(),
+        "weekday": now_et.strftime("%A"),
+        "us_equity_regular_session_open": _is_us_equity_market_open(now_et),
+        "market_hours_et": _us_market_hours_et(now_et),
+    }
+    _emit_t2_json(out, cmd="time")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# T2.6 — events + reconcile (agent-first JSON surface)
+# ---------------------------------------------------------------------------
+
+def _cmd_events(args: argparse.Namespace) -> int:
+    """Read the SEC-17a-4 NDJSON audit log under data/audit/*.jsonl.
+
+    Agents reconstruct their own history after a crash, verify a request_id
+    actually ran, or diff their assumptions against what really happened.
+    No broker call — purely local file read.
+
+    Filters:
+      --since YYYY-MM-DD    inclusive lower date bound (local)
+      --until YYYY-MM-DD    inclusive upper date bound (local)
+      --cmd NAME            only entries for this subcommand
+      --outcome ok|error    exit_code==0 vs non-zero
+      --tail N              last N matching entries only
+    """
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    from datetime import date
+    from trading_algo.audit import iter_entries, tail as audit_tail
+
+    def _parse_day(raw: str | None) -> date | None:
+        if not raw:
+            return None
+        try:
+            return date.fromisoformat(raw)
+        except ValueError as exc:
+            raise SystemExit(f"--since/--until must be YYYY-MM-DD: {raw!r} ({exc})")
+
+    since = _parse_day(getattr(args, "since", None))
+    until = _parse_day(getattr(args, "until", None))
+    cmd_filter = getattr(args, "cmd_filter", None)
+    outcome = getattr(args, "outcome", None)
+    tail_n = getattr(args, "tail", None)
+
+    if tail_n is not None and int(tail_n) > 0:
+        entries = audit_tail(int(tail_n), cmd=cmd_filter, outcome=outcome)
+        if since or until:
+            entries = [
+                e for e in entries
+                if (not since or (e.get("ts") and date.fromisoformat(e["ts"][:10]) >= since))
+                and (not until or (e.get("ts") and date.fromisoformat(e["ts"][:10]) <= until))
+            ]
+    else:
+        entries = list(iter_entries(
+            since=since, until=until, cmd=cmd_filter, outcome=outcome,
+        ))
+
+    # --fields / --summary projection (T2.7).
+    projected = _maybe_project_and_summarize(entries, args, summarizer=None)
+    if getattr(args, "summary", False):
+        # Minimal rollup: count + distinct cmds + outcome breakdown.
+        from collections import Counter
+        cmds = Counter(e.get("cmd") for e in entries)
+        outcomes = {
+            "ok": sum(1 for e in entries if e.get("exit_code") == 0),
+            "error": sum(1 for e in entries if e.get("exit_code") not in (0, None)),
+        }
+        projected = {
+            "count": len(entries),
+            "by_cmd": dict(cmds),
+            "outcome": outcomes,
+        }
+        _emit_t2_json(projected, cmd="events")
+        return 0
+    _emit_t2_json({"count": len(entries), "entries": projected}, cmd="events")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# T2.7 — --explain / tools-describe / --fields / --summary
+# ---------------------------------------------------------------------------
+
+def _maybe_handle_explain(args: argparse.Namespace) -> int | None:
+    """If `--explain` was passed, emit explain(cmd) JSON and short-circuit.
+
+    Returns an exit code to return from the handler, or None if normal
+    execution should proceed.
+    """
+    if not getattr(args, "explain", False):
+        return None
+    from trading_algo.explain import explain
+    cmd_name = getattr(args, "cmd", None) or "unknown"
+    _emit_t2_json({"cmd": cmd_name, "explanation": explain(cmd_name)}, cmd="explain")
+    return 0
+
+
+def _cmd_tools_describe(args: argparse.Namespace) -> int:
+    """Emit the JSONSchema array for every subcommand — agents use this
+    to auto-generate tool/function definitions for LLM tool calling.
+    """
+    from trading_algo.tool_schema import describe_tools
+    tools = describe_tools(build_parser())
+    _emit_t2_json({"count": len(tools), "tools": tools}, cmd="tools-describe")
+    return 0
+
+
+def _maybe_project_and_summarize(
+    rows: list[dict],
+    args: argparse.Namespace,
+    summarizer=None,
+) -> list[dict] | dict:
+    """Apply --fields / --summary to list-of-dict output.
+
+    Precedence: --summary wins over --fields if both are set.
+    """
+    from trading_algo.projection import parse_fields, project_rows
+
+    if getattr(args, "summary", False) and summarizer is not None:
+        return summarizer(rows)
+    fields = parse_fields(getattr(args, "fields", None))
+    if fields:
+        return project_rows(rows, fields)
+    return rows
+
+
+def _cmd_reconcile(args: argparse.Namespace) -> int:
+    """Reconcile OMS's view of open orders with broker's live openTrades().
+
+    A structured, agent-consumable version of `oms-reconcile`. Same
+    underlying engine logic (OrderManager.reconcile) but emits JSON.
+
+    Requires TRADING_DB_PATH to be set — reconcile only makes sense when
+    the OMS has persistent state to reconcile against.
+    """
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
+    if not cfg.db_path:
+        raise SystemExit("reconcile requires TRADING_DB_PATH to be set")
+    broker = _make_broker(args.broker, cfg)
+    broker.connect()
+    try:
+        oms = OrderManager(broker, cfg, confirm_token=args.confirm_token)
+        try:
+            res = oms.reconcile()
+        finally:
+            oms.close()
+        entries = []
+        for oid, st in (res or {}).items():
+            entries.append({"order_id": oid, "status": st})
+        out = {
+            "reconciled_count": len(entries),
+            "orders": entries,
+        }
+        _emit_t2_json(out, cmd="reconcile")
+        return 0
+    finally:
+        broker.disconnect()
+
+
 def _cmd_halt(args: argparse.Namespace) -> int:
     """Write the HALTED sentinel. Every subsequent write command refuses
     until the sentinel is removed. Safe to call while already halted (the
@@ -1175,6 +1643,93 @@ def build_parser() -> argparse.ArgumentParser:
     bt.add_argument("--spread", type=float, default=0.0)
     bt.add_argument("--db-path", default=None)
     bt.set_defaults(func=_cmd_backtest)
+
+    # --- T2.5: watch / status / time ---
+    watch_p = sub.add_parser(
+        "watch",
+        help="Poll a resource until a restricted expression is True (exit 124 on timeout)",
+    )
+    watch_p.add_argument("--broker", choices=["ibkr", "sim"], default="ibkr")
+    watch_p.add_argument(
+        "--resource", choices=["quote", "order", "position"], required=True,
+        help="What to poll: quote (market data), order (by id), position (by symbol)",
+    )
+    watch_p.add_argument("--symbol", default=None, help="Symbol for quote/position resources")
+    watch_p.add_argument("--kind", choices=["STK", "FUT", "FX", "OPT"], default="STK")
+    watch_p.add_argument("--exchange", default=None)
+    watch_p.add_argument("--currency", default=None)
+    watch_p.add_argument("--expiry", default=None)
+    watch_p.add_argument("--right", choices=["C", "P"], default=None)
+    watch_p.add_argument("--strike", default=None)
+    watch_p.add_argument("--multiplier", default=None)
+    watch_p.add_argument("--order-id", default=None, help="Order id (order resource)")
+    watch_p.add_argument(
+        "--until", required=True,
+        help="Restricted Python expression over the snapshot (e.g. 'last > 150', "
+             "'status == \"Filled\"'). Only compare/logic/arith ops are allowed.",
+    )
+    watch_p.add_argument("--every", type=float, default=2.0,
+                         help="Poll interval seconds (min 0.2)")
+    watch_p.add_argument("--timeout", type=float, default=60.0,
+                         help="Max seconds to poll before giving up (exit 124)")
+    watch_p.add_argument("--explain", action="store_true",
+                         help="Print the command's explanation and exit 0 without running it")
+    watch_p.set_defaults(func=_cmd_watch)
+
+    status_p = sub.add_parser(
+        "status",
+        help="One JSON blob: broker connectivity, config, halt state, market hours",
+    )
+    status_p.add_argument("--broker", choices=["ibkr", "sim"], default="ibkr")
+    status_p.add_argument("--skip-broker", action="store_true",
+                          help="Skip broker connect (config + market + halt only)")
+    status_p.add_argument("--explain", action="store_true",
+                          help="Print the command's explanation and exit 0 without running it")
+    status_p.set_defaults(func=_cmd_status)
+
+    time_p = sub.add_parser(
+        "time",
+        help="Emit clocks — UTC, ET, market open/close, weekday (no broker call)",
+    )
+    time_p.add_argument("--explain", action="store_true",
+                        help="Print the command's explanation and exit 0 without running it")
+    time_p.set_defaults(func=_cmd_time)
+
+    # --- T2.6: events + reconcile ---
+    events_p = sub.add_parser(
+        "events",
+        help="Read the local NDJSON audit log (data/audit/*.jsonl). No broker call.",
+    )
+    events_p.add_argument("--since", default=None, help="Inclusive lower date bound (YYYY-MM-DD)")
+    events_p.add_argument("--until", default=None, help="Inclusive upper date bound (YYYY-MM-DD)")
+    events_p.add_argument("--cmd-filter", dest="cmd_filter", default=None,
+                          help="Only entries where cmd==NAME")
+    events_p.add_argument("--outcome", choices=["ok", "error"], default=None,
+                          help="ok = exit_code 0; error = non-zero")
+    events_p.add_argument("--tail", type=int, default=None,
+                          help="Only the most recent N matching entries")
+    events_p.add_argument("--fields", default=None,
+                          help="Comma-separated keys to keep per entry (e.g. 'ts,cmd,exit_code')")
+    events_p.add_argument("--summary", action="store_true",
+                          help="Emit roll-up (count + by-cmd + outcome) instead of entries")
+    events_p.add_argument("--explain", action="store_true",
+                          help="Print the command's explanation and exit 0 without running it")
+    events_p.set_defaults(func=_cmd_events)
+
+    rec2_p = sub.add_parser(
+        "reconcile",
+        help="Reconcile OMS DB with broker openTrades (JSON output, agent-friendly)",
+    )
+    rec2_p.add_argument("--broker", choices=["ibkr", "sim"], default="ibkr")
+    rec2_p.add_argument("--explain", action="store_true",
+                        help="Print the command's explanation and exit 0 without running it")
+    rec2_p.set_defaults(func=_cmd_reconcile)
+
+    td_p = sub.add_parser(
+        "tools-describe",
+        help="Emit JSONSchema for every subcommand — agents build tool-call specs from this",
+    )
+    td_p.set_defaults(func=_cmd_tools_describe)
 
     # --- kill switch (halt / resume) ---
     halt_p = sub.add_parser(
