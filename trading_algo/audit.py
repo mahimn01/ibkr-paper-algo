@@ -125,15 +125,28 @@ def _redact_value(v: Any) -> Any:
 
 
 def _redact_args(args: dict) -> dict:
-    """Shallow redaction pass. Known credential-keyed values become
-    `***REDACTED***`; other values pass through _redact_value.
+    """Shallow redaction pass over known credential keys, plus a pattern-
+    based pass (via `trading_algo.redaction`) over every string value so
+    tokens embedded in free-form args (e.g. `--note "used token XYZ"`)
+    still get scrubbed.
     """
+    from trading_algo.redaction import redact_text
+
+    def _scrub_string_leaves(v: Any) -> Any:
+        if isinstance(v, str):
+            return redact_text(v)
+        if isinstance(v, (list, tuple)):
+            return [_scrub_string_leaves(x) for x in v]
+        if isinstance(v, dict):
+            return {k: _scrub_string_leaves(val) for k, val in v.items()}
+        return v
+
     out: dict[str, Any] = {}
     for k, v in args.items():
         if isinstance(k, str) and k in _REDACT_KEYS:
             out[k] = "***REDACTED***"
         else:
-            out[k] = _redact_value(v)
+            out[k] = _scrub_string_leaves(_redact_value(v))
     return out
 
 

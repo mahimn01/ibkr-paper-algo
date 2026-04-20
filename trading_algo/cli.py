@@ -924,30 +924,6 @@ def _emit_t2_json(data: dict, cmd: str) -> None:
     print(json.dumps(data, indent=2, default=str, ensure_ascii=False))
 
 
-def _us_market_hours_et(now_et) -> dict:
-    """Static US equity market hours in ET. Does not account for
-    half-days (early close 13:00 ET) — that's a T3 concern.
-    """
-    date = now_et.date().isoformat()
-    return {
-        "nyse_nasdaq_open_et": f"{date}T09:30:00",
-        "nyse_nasdaq_close_et": f"{date}T16:00:00",
-        "cboe_options_open_et": f"{date}T09:30:00",
-        "cboe_options_close_et": f"{date}T16:00:00",
-        "globex_es_nq_open_et": f"{date}T18:00:00",  # Sun open; daily break 17-18
-        "globex_es_nq_close_et": f"{date}T17:00:00",
-    }
-
-
-def _is_us_equity_market_open(now_et) -> bool:
-    """Strict regular-session check, Mon–Fri 09:30–16:00 ET.
-    Holidays are a TODO — this is a best-effort heuristic."""
-    if now_et.weekday() >= 5:  # Sat/Sun
-        return False
-    mins = now_et.hour * 60 + now_et.minute
-    return 9 * 60 + 30 <= mins < 16 * 60
-
-
 def _cmd_watch(args: argparse.Namespace) -> int:
     """Poll a named resource every N seconds; exit 0 with the snapshot when
     `--until EXPR` evaluates True; exit 124 if the deadline elapses first.
@@ -1106,15 +1082,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
     rc = _maybe_handle_explain(args)
     if rc is not None:
         return rc
-    from datetime import datetime, timezone
-    try:
-        from zoneinfo import ZoneInfo
-        et = ZoneInfo("America/New_York")
-    except Exception:
-        et = timezone.utc  # fallback
-
-    now_utc = datetime.now(tz=timezone.utc)
-    now_et = now_utc.astimezone(et)
+    from trading_algo.market_rules import market_state
 
     cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
 
@@ -1163,13 +1131,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
             broker_block["error"] = f"{type(exc).__name__}: {exc}"
 
     # Market section ------------------------------------------------------
-    market_block = {
-        "et_now": now_et.isoformat(timespec="seconds"),
-        "utc_now": now_utc.isoformat(timespec="seconds"),
-        "weekday": now_et.strftime("%A"),
-        "us_equity_regular_session_open": _is_us_equity_market_open(now_et),
-        **_us_market_hours_et(now_et),
-    }
+    market_block = market_state()
 
     # Config section ------------------------------------------------------
     config_block = {
@@ -1205,24 +1167,8 @@ def _cmd_time(args: argparse.Namespace) -> int:
     rc = _maybe_handle_explain(args)
     if rc is not None:
         return rc
-    from datetime import datetime, timezone
-    try:
-        from zoneinfo import ZoneInfo
-        et = ZoneInfo("America/New_York")
-    except Exception:
-        et = timezone.utc
-
-    now_utc = datetime.now(tz=timezone.utc)
-    now_et = now_utc.astimezone(et)
-    out = {
-        "utc_now": now_utc.isoformat(timespec="seconds"),
-        "et_now": now_et.isoformat(timespec="seconds"),
-        "et_date": now_et.date().isoformat(),
-        "weekday": now_et.strftime("%A"),
-        "us_equity_regular_session_open": _is_us_equity_market_open(now_et),
-        "market_hours_et": _us_market_hours_et(now_et),
-    }
-    _emit_t2_json(out, cmd="time")
+    from trading_algo.market_rules import market_state
+    _emit_t2_json(market_state(), cmd="time")
     return 0
 
 

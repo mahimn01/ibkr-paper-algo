@@ -1202,6 +1202,16 @@ def cmd_cancel_all(args: argparse.Namespace) -> int:
     assert_not_halted()
     if not args.yes:
         raise SystemExit("Refusing to global-cancel without --yes")
+    # Panic-level gate: global cancel kills every working order across every
+    # client on the account. Intentionally a DIFFERENT token from --yes so
+    # an agent replaying a prior `--yes` batch cannot accidentally fire
+    # reqGlobalCancel.
+    if not getattr(args, "confirm_panic", False):
+        raise SystemExit(
+            "Refusing global-cancel without --confirm-panic. This flag is "
+            "intentionally distinct from --yes to prevent accidental global "
+            "cancellation via retried commands."
+        )
     ib = _connect(args)
     ib.reqGlobalCancel()
     ib.sleep(1.5)
@@ -1504,6 +1514,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = add("cancel-all", cmd_cancel_all, "Global cancel (all orders, all clients)")
     s.add_argument("--yes", action="store_true")
+    s.add_argument("--confirm-panic", action="store_true", dest="confirm_panic",
+                   help="Required alongside --yes — distinct token so a replayed --yes "
+                        "batch cannot accidentally fire a global cancel.")
 
     # --- WSH / FX ---
     add("wsh-meta", cmd_wsh_meta, "Wall Street Horizon metadata")

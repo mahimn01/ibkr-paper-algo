@@ -39,7 +39,9 @@ class TestCmdTime:
         assert rc == 0
         payload = json.loads(buf.getvalue())
         for key in ("utc_now", "et_now", "et_date", "weekday",
-                    "us_equity_regular_session_open", "market_hours_et"):
+                    "us_equity_regular_session_open", "session_cutoffs_et",
+                    "next_open_et", "next_close_et",
+                    "is_trading_day", "is_holiday", "is_half_day"):
             assert key in payload
 
     def test_weekend_is_closed(self) -> None:

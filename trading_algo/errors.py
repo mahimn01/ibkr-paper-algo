@@ -166,7 +166,8 @@ def build_error_payload(
     if classified is None:
         classified = classify_exception(exc)
 
-    message = str(exc) or type(exc).__name__
+    from trading_algo.redaction import redact_text
+    message = redact_text(str(exc) or type(exc).__name__)
     payload: dict[str, Any] = {
         "code": classified.error_code,
         "exit_code": classified.exit_code,
