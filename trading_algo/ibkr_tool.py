@@ -1116,6 +1116,9 @@ def _wait_for_order_ack(ib: IB, trade: Any, timeout: float = 15.0) -> bool:
 
 
 def cmd_place(args: argparse.Namespace) -> int:
+    # Halt sentinel check — refuses writes while data/HALTED exists.
+    from trading_algo.halt import assert_not_halted
+    assert_not_halted()
     if not args.yes:
         raise SystemExit("Refusing to place live order without --yes confirmation flag.")
     ib = _connect(args)
@@ -1133,6 +1136,9 @@ def cmd_place(args: argparse.Namespace) -> int:
 
 
 def cmd_combo(args: argparse.Namespace) -> int:
+    # Halt sentinel check — refuses writes while data/HALTED exists.
+    from trading_algo.halt import assert_not_halted
+    assert_not_halted()
     """Place a multi-leg BAG order. Legs: --legs 'BUY:conId:ratio,SELL:conId:ratio,...'"""
     if not args.yes:
         raise SystemExit("Refusing to place live combo order without --yes confirmation flag.")
@@ -1168,6 +1174,9 @@ def cmd_combo(args: argparse.Namespace) -> int:
 
 
 def cmd_cancel(args: argparse.Namespace) -> int:
+    # Halt sentinel check — refuses writes while data/HALTED exists.
+    from trading_algo.halt import assert_not_halted
+    assert_not_halted()
     ib = _connect(args)
     trades = ib.reqOpenOrders()
     ib.sleep(0.5)
@@ -1188,6 +1197,9 @@ def cmd_cancel(args: argparse.Namespace) -> int:
 
 
 def cmd_cancel_all(args: argparse.Namespace) -> int:
+    # Halt sentinel check — refuses writes while data/HALTED exists.
+    from trading_algo.halt import assert_not_halted
+    assert_not_halted()
     if not args.yes:
         raise SystemExit("Refusing to global-cancel without --yes")
     ib = _connect(args)
@@ -1507,17 +1519,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    try:
-        return args.func(args)
-    except KeyboardInterrupt:
-        return 130
-    except SystemExit:
-        raise
-    except Exception as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        import traceback
-        traceback.print_exc()
-        return 1
+    # Route through the shared runner: audit every invocation, emit
+    # structured JSON on exception, classify exit codes via the IBKR-aware
+    # classifier. Agents consuming this CLI never have to regex stderr.
+    from trading_algo.cli_runner import run_command
+    return run_command(args, default_cmd_name="ibkr-tool")
 
 
 if __name__ == "__main__":

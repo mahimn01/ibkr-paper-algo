@@ -933,17 +933,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    try:
-        return args.func(args)
-    except KeyboardInterrupt:
-        return 130
-    except SystemExit:
-        raise
-    except Exception as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        import traceback
-        traceback.print_exc()
-        return 1
+    from trading_algo.cli_runner import run_command
+    return run_command(args, default_cmd_name="flex-tool")
 
 
 if __name__ == "__main__":

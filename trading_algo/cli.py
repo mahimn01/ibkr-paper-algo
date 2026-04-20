@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -121,6 +122,9 @@ def _assert_ibkr_order_authorized(cfg: TradingConfig, confirm_token: str | None)
 
 
 def _cmd_place_order(args: argparse.Namespace) -> int:
+    # Halt sentinel check — refuses writes while data/HALTED exists.
+    from trading_algo.halt import assert_not_halted
+    assert_not_halted()
     cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
     if args.broker == "ibkr":
         _assert_ibkr_order_authorized(cfg, args.confirm_token)
@@ -171,7 +175,64 @@ def _cmd_place_order(args: argparse.Namespace) -> int:
             oca_group=args.oca_group,
             transmit=not bool(args.no_transmit),
         )
-        result = broker.place_order(req)
+
+        # Idempotency path. If --idempotency-key is supplied, check a
+        # SQLite cache for a prior completed attempt with this key: if
+        # present, replay the stored result (never re-transmit). If the
+        # cache shows an in-flight attempt, fall through to the
+        # IdempotentOrderPlacer which will orderbook-check before
+        # retransmitting.
+        idem_key = getattr(args, "idempotency_key", None)
+        result = None
+        idem_store = None
+        if idem_key:
+            from trading_algo.idempotency import IdempotencyStore, derive_order_ref
+            idem_store = IdempotencyStore()
+            existing = idem_store.lookup(idem_key)
+            if existing is not None and existing.completed:
+                # Short-circuit replay — no broker call.
+                replayed = existing.result or {}
+                if isinstance(replayed, dict):
+                    print(
+                        f"orderId={replayed.get('order_id', existing.ib_order_id or '?')} "
+                        f"status={replayed.get('status', '?')} replayed=true"
+                    )
+                    return int(existing.exit_code or 0)
+            # Derive a deterministic orderRef from the key so cross-process
+            # retries produce the same orderRef and the orderbook check
+            # can find the in-flight order.
+            derived_ref = derive_order_ref(idem_key)
+            from dataclasses import replace
+            req = replace(req, order_ref=args.order_ref or derived_ref)
+            idem_store.record_attempt(
+                key=idem_key, cmd="place-order",
+                request={
+                    "symbol": args.symbol, "side": args.side,
+                    "qty": args.qty, "type": args.type,
+                    "limit_price": args.limit_price, "stop_price": args.stop_price,
+                },
+                order_ref=req.order_ref,
+            )
+
+        if idem_key and args.broker == "ibkr":
+            # Route through the idempotent placer so a crashed retry
+            # doesn't double-fill.
+            from trading_algo.broker.idempotent_placer import IdempotentOrderPlacer
+            placer = IdempotentOrderPlacer(broker)
+            result = placer.place(req, idempotency_key=idem_key)
+        else:
+            result = broker.place_order(req)
+
+        if idem_store and idem_key:
+            try:
+                idem_store.record_completion(
+                    key=idem_key,
+                    result={"order_id": result.order_id, "status": result.status},
+                    exit_code=0,
+                    ib_order_id=int(result.order_id) if str(result.order_id).isdigit() else None,
+                )
+            except Exception:
+                pass  # Audit should never fail the command.
         if store and run_id is not None:
             store.log_order(run_id, broker=args.broker, order_id=result.order_id, request=req, status=result.status)
             try:
@@ -261,6 +322,9 @@ def _cmd_history(args: argparse.Namespace) -> int:
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
+    # Halt sentinel check — refuses writes while data/HALTED exists.
+    from trading_algo.halt import assert_not_halted
+    assert_not_halted()
     cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
     cfg = TradingConfig(
         broker=args.broker,
@@ -310,6 +374,9 @@ def _cmd_order_status(args: argparse.Namespace) -> int:
 
 
 def _cmd_cancel_order(args: argparse.Namespace) -> int:
+    # Halt sentinel check — refuses writes while data/HALTED exists.
+    from trading_algo.halt import assert_not_halted
+    assert_not_halted()
     cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
     broker = _make_broker(args.broker, cfg)
     store = SqliteStore(cfg.db_path) if cfg.db_path else None
@@ -334,6 +401,9 @@ def _cmd_cancel_order(args: argparse.Namespace) -> int:
 
 
 def _cmd_modify_order(args: argparse.Namespace) -> int:
+    # Halt sentinel check — refuses writes while data/HALTED exists.
+    from trading_algo.halt import assert_not_halted
+    assert_not_halted()
     cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
     if args.broker == "ibkr":
         _assert_ibkr_order_authorized(cfg, args.confirm_token)
@@ -392,6 +462,9 @@ def _cmd_modify_order(args: argparse.Namespace) -> int:
 
 
 def _cmd_place_bracket(args: argparse.Namespace) -> int:
+    # Halt sentinel check — refuses writes while data/HALTED exists.
+    from trading_algo.halt import assert_not_halted
+    assert_not_halted()
     cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
     if args.broker == "ibkr":
         _assert_ibkr_order_authorized(cfg, args.confirm_token)
@@ -840,6 +913,51 @@ def _cmd_wheel_live(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_halt(args: argparse.Namespace) -> int:
+    """Write the HALTED sentinel. Every subsequent write command refuses
+    until the sentinel is removed. Safe to call while already halted (the
+    new reason / expires-in overwrite the existing sentinel).
+    """
+    from trading_algo.halt import parse_duration, write_halt
+
+    expires_seconds: float | None = None
+    if getattr(args, "expires_in", None):
+        try:
+            expires_seconds = parse_duration(args.expires_in)
+        except ValueError as exc:
+            print(f"ERROR: --expires-in: {exc}", file=sys.stderr)
+            return 2
+
+    state = write_halt(
+        reason=args.reason,
+        by=(args.by or os.getenv("TRADING_OPERATOR", "operator")),
+        expires_in_seconds=expires_seconds,
+    )
+    out = state.to_dict()
+    out["halted"] = True
+    print(json.dumps(out, indent=2, default=str))
+    return 0
+
+
+def _cmd_resume(args: argparse.Namespace) -> int:
+    """Clear the HALTED sentinel. Requires --confirm-resume — distinct
+    from --yes so a replayed `halt --yes` can't accidentally lift the halt.
+    """
+    from trading_algo.halt import clear_halt
+
+    if not getattr(args, "confirm_resume", False):
+        print(
+            "ERROR: `resume` requires --confirm-resume. This is "
+            "intentionally a different token from --yes to prevent an "
+            "accidental lift of a halt.",
+            file=sys.stderr,
+        )
+        return 2
+    cleared = clear_halt()
+    print(json.dumps({"resumed": cleared}, indent=2))
+    return 0
+
+
 def _cmd_chat(args: argparse.Namespace) -> int:
     from trading_algo.llm.chat import main as chat_main
 
@@ -919,6 +1037,13 @@ def build_parser() -> argparse.ArgumentParser:
     place.add_argument("--order-ref", default=None)
     place.add_argument("--oca-group", default=None)
     place.add_argument("--no-transmit", action="store_true", help="Create order with transmit=false (advanced)")
+    place.add_argument(
+        "--idempotency-key", default=None, metavar="KEY",
+        help="Durable idempotency key. On retry with the same key, replay the "
+             "prior result from data/idempotency.sqlite (never re-transmit). "
+             "BLAKE2b-derived into an IBKR orderRef so orderbook-based dedup "
+             "works across process restarts. Required for crash-safe retries.",
+    )
     place.set_defaults(func=_cmd_place_order)
 
     snap = sub.add_parser("snapshot", help="Fetch a market data snapshot")
@@ -1051,6 +1176,28 @@ def build_parser() -> argparse.ArgumentParser:
     bt.add_argument("--db-path", default=None)
     bt.set_defaults(func=_cmd_backtest)
 
+    # --- kill switch (halt / resume) ---
+    halt_p = sub.add_parser(
+        "halt",
+        help="Write the HALTED sentinel — refuses all write commands until cleared",
+    )
+    halt_p.add_argument("--reason", required=True,
+                        help="Short description of why trading is halted (stored in sentinel)")
+    halt_p.add_argument("--by", default=None,
+                        help="Operator / agent identifier. Defaults to $TRADING_OPERATOR or 'operator'.")
+    halt_p.add_argument("--expires-in", default=None, metavar="DURATION",
+                        help="Auto-clear after duration (e.g. 30s, 5m, 1h, 2d). "
+                             "Without this flag the halt persists until `resume`.")
+    halt_p.set_defaults(func=_cmd_halt)
+
+    resume_p = sub.add_parser(
+        "resume",
+        help="Clear the HALTED sentinel (requires --confirm-resume)",
+    )
+    resume_p.add_argument("--confirm-resume", action="store_true",
+                          help="Required. Distinct from --yes to prevent accidental resume.")
+    resume_p.set_defaults(func=_cmd_resume)
+
     exp = sub.add_parser("export-history", help="Export IBKR historical bars to a backtest CSV")
     exp.add_argument("--broker", choices=["ibkr"], default="ibkr")
     exp.add_argument("--kind", choices=["STK", "FUT", "FX", "OPT"], default="STK")
@@ -1160,7 +1307,15 @@ def main(argv: list[str] | None = None) -> int:
         configure_logging(level=log_level)
     logging.getLogger(__name__).debug("Loaded config: %s", cfg)
 
-    return int(args.func(args))
+    # TUI mode owns the terminal — bypass the structured runner (stderr
+    # writes would corrupt the full-screen UI).
+    if tui_mode:
+        return int(args.func(args))
+
+    # Every other invocation: audit + structured errors + exit-code
+    # classification via the shared runner.
+    from trading_algo.cli_runner import run_command
+    return run_command(args, default_cmd_name="cli")
 
 
 if __name__ == "__main__":
