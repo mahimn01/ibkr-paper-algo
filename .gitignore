@@ -14,6 +14,11 @@ __pycache__/
 *.sqlite3
 *.sqlite
 
+# NDJSON audit logs (SEC 17a-4 runtime output)
+data/audit/
+data/HALTED
+data/idempotency.sqlite*
+
 # Local logs
 logs/
 *.log
