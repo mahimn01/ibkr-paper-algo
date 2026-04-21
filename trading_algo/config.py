@@ -1,7 +1,36 @@
+"""Runtime configuration for the IBKR trading stack.
+
+Hardened for enterprise use:
+- `_get_env_bool` is STRICT — unknown values raise `EnvParseError`. A typo
+  on a safety-critical flag like `TRADING_ALLOW_LIVE=tru` can never silently
+  flip it off.
+- `atomic_write_text` writes via tempfile → `os.replace` with owner-only
+  permissions, so any cached artifact (flex CSV dumps, contract cache, etc.)
+  is never observed in a partial / world-readable state.
+"""
+
 from __future__ import annotations
 
 import os
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
+
+
+# ---------------------------------------------------------------------------
+# Env parsing
+# ---------------------------------------------------------------------------
+
+_TRUTHY = frozenset({"1", "true", "yes", "on", "y", "t"})
+_FALSY = frozenset({"0", "false", "no", "off", "n", "f", ""})
+
+
+class EnvParseError(ValueError):
+    """Raised when an env var is set but cannot be parsed.
+
+    Never silently defaulted — a typo on a safety-critical env var must fail
+    loud at startup, not quietly flip behaviour.
+    """
 
 
 def _get_env(name: str, default: str) -> str:
@@ -10,18 +39,111 @@ def _get_env(name: str, default: str) -> str:
 
 
 def _get_env_int(name: str, default: int) -> int:
-    value = os.getenv(name)
-    if value is None or value == "":
+    raw = os.getenv(name)
+    if raw is None or raw == "":
         return default
-    return int(value)
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise EnvParseError(
+            f"Env var {name}={raw!r} is not an int: {exc}"
+        ) from exc
+
+
+def _get_env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise EnvParseError(
+            f"Env var {name}={raw!r} is not a float: {exc}"
+        ) from exc
 
 
 def _get_env_bool(name: str, default: bool) -> bool:
-    value = os.getenv(name)
-    if value is None or value == "":
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    """Strict env-bool parser.
 
+    Unset → `default`. Set to anything in `_TRUTHY` or `_FALSY` → explicit.
+    Anything else → `EnvParseError`. This matters for safety flags like
+    `TRADING_ALLOW_LIVE` where a typo must never be silently interpreted.
+    """
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    norm = raw.strip().lower()
+    if norm in _TRUTHY:
+        return True
+    if norm in _FALSY:
+        return False
+    raise EnvParseError(
+        f"Env var {name}={raw!r} is not a recognised boolean. "
+        f"Use one of: {sorted(_TRUTHY | _FALSY - {''})}. "
+        f"Unset the var to get the default ({default})."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Atomic write
+# ---------------------------------------------------------------------------
+
+def atomic_write_text(path: Path, data: str, *, mode: int = 0o600) -> None:
+    """Atomically write `data` to `path` with the given file mode.
+
+    Writes to a temp file in the same directory, fsyncs, then renames over
+    the target. Guarantees:
+    - No partial-write state visible on filesystem (rename is atomic on POSIX).
+    - Temp file is created with `mode` permissions from the start (no TOCTOU
+      window where another process could read a world-readable version).
+    - Parent directory is created with 0o700 if missing.
+
+    On Windows rename is best-effort (replace existing); mode is a no-op.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name == "posix":
+        try:
+            os.chmod(path.parent, 0o700)
+        except OSError:
+            pass
+
+    fd: int | None = None
+    tmp_name: str | None = None
+    try:
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=str(path.parent),
+        )
+        if os.name == "posix":
+            os.fchmod(fd, mode)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            fd = None  # fdopen took ownership
+            f.write(data)
+            f.flush()
+            try:
+                os.fsync(f.fileno())
+            except OSError:
+                # fsync not supported on some filesystems (network mounts).
+                pass
+        os.replace(tmp_name, path)
+        tmp_name = None
+    finally:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        if tmp_name is not None and os.path.exists(tmp_name):
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+
+
+# ---------------------------------------------------------------------------
+# Configuration dataclasses
+# ---------------------------------------------------------------------------
 
 IBKR_PORT_TWS_LIVE = 7496
 IBKR_PORT_TWS_PAPER = 7497

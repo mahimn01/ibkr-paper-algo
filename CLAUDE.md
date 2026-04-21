@@ -25,3 +25,5 @@ pytest                           # Run tests
 
 ## Self-Improvement
 After every bug fix or correction, add a rule here to prevent repeating it.
+
+- **IBKR order submission requires explicit account on multi-account logins.** Error 435 "You must specify an account" fires silently within ~500ms of placeOrder when multiple accounts are linked. The `cmd_place`/`cmd_combo` now call `_resolve_account()` (checks --account → IBKR_ACCOUNT env → sole managed account, else fail loudly) and `_wait_for_order_ack()` (waits up to 15s for terminal/stable state instead of a blind 2s sleep). Never reintroduce blind post-placeOrder sleeps shorter than IBKR's rejection-notification window.

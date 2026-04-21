@@ -6,6 +6,94 @@ date and short SHA.
 
 ## 2026-04
 
+### Unreleased — Wave T1: enterprise hardening (agent-first infrastructure)
+
+Back-port of `kite-algo`'s Wave 1 hardening, adapted for IBKR. ~4,415 LOC
+added (new modules + tests). 572 → 830 tests (+258), zero regressions.
+Porting roadmap produced by cross-repo feasibility study; P0 items here.
+
+**New modules** (all under `trading_algo/`):
+
+- `config.py` (hardened): `_get_env_bool` is now STRICT — unknown values
+  raise `EnvParseError` instead of silently defaulting. Closes the
+  latent typo-disables-live-gate bug (a `TRADING_ALLOW_LIVE=tru` typo
+  now crashes at startup, forcing the operator to notice). New
+  `atomic_write_text(path, data, mode)` helper for future use (flex CSV
+  dumps, contract cache, any cached state) — tempfile → `os.replace`
+  with owner-only permissions.
+- `exit_codes.py`: 15 enumerated codes (OK, GENERIC, USAGE, VALIDATION,
+  HARD_REJECT, AUTH, PERMISSION, LEASE, HALTED, OUT_OF_WINDOW,
+  MARKET_CLOSED, UNAVAILABLE, INTERNAL, TRANSIENT, TIMEOUT, SIGINT).
+  `classify_exception` maps our own IBKR exceptions (`IBKRConnectionError`
+  → UNAVAILABLE, `IBKRRateLimitError` → TRANSIENT, etc.) + ib_async
+  `errorCode` values: 1100/1101/1102 → UNAVAILABLE, 200 → VALIDATION,
+  201/203/103 → HARD_REJECT, 162/165/420 → TRANSIENT, 354/430 →
+  PERMISSION, 502/504 → AUTH. Handles attribute + string-scan extraction.
+- `envelope.py`: `{ok, cmd, schema_version, request_id, data, warnings,
+  meta}` per command. 26-char Crockford-base32 ULID request IDs;
+  `TRADING_PARENT_REQUEST_ID` propagates for nested agent workflows.
+  `TRADING_NO_ENVELOPE=1` backwards-compat shim.
+- `errors.py`: `emit_error(exc, env=...)` writes a single structured
+  stderr JSON with code / class / message / retryable / ib_error_code /
+  field_errors / suggested_action. IBKR-flavored action hints ("reconnect
+  TWS/Gateway", "check market-data subscription", "wait 10s for pacing").
+  `with_error_envelope(cmd)` decorator.
+- `halt.py`: sentinel at `data/HALTED` (override `TRADING_HALT_PATH`).
+  `write_halt` / `clear_halt` / `assert_not_halted` / `parse_duration`.
+  Malformed sentinels fail CLOSED ("assume halted"). Optional
+  `--expires-in` (e.g. `1h`) auto-clears on next read. `HaltActive`
+  classifies as exit code 11.
+- `audit.py`: NDJSON audit log at `data/audit/YYYY-MM-DD.jsonl`
+  (override `TRADING_AUDIT_DIR`). POSIX-atomic `O_APPEND` single
+  `write()` — concurrent writes never interleave partial lines.
+  Per-entry fields: ts / ts_epoch_ms / request_id / parent_request_id /
+  cmd / args (secret-redacted) / exit_code / error_code / elapsed_ms /
+  ib_order_id / perm_id / order_ref / account / strategy_id / agent_id.
+  Shallow redaction for known credential-keyed values (api_secret,
+  access_token, flex_token, password, etc.). 7-year retention default
+  (SEC 17a-4 min is 6y; we use 7 for enterprise).
+- `idempotency.py`: SQLite-backed `IdempotencyStore` at
+  `data/idempotency.sqlite` (WAL). Records (cmd, request_json,
+  first_seen_at_ms, result_json, completed_at_ms, exit_code,
+  ib_order_id, perm_id, order_ref, request_id). `record_attempt` /
+  `record_completion` / `lookup` / `find_by_order_ref` / `purge_older_than`.
+  `derive_order_ref(key, prefix="TA", length=30)` — BLAKE2b-deterministic
+  IBKR orderRef derivation so cross-process retries produce the same
+  orderRef and orderbook-based dedup works.
+- `broker/idempotent_placer.py`: `IdempotentOrderPlacer` wraps any
+  broker's `place_order`. Before placing, queries `ib.openTrades()` +
+  `ib.reqCompletedOrders()` for an order whose `orderRef` matches our
+  derived value. If found → return existing Trade state; NEVER
+  re-transmit. If lookup itself fails →
+  `IBKROrderbookLookupError` (classified as UNAVAILABLE/retryable):
+  agent must reconcile before retrying. The agent-crash double-fill
+  defense.
+- `cli_runner.py`: shared `run_command(args)` wrapper. Every top-level
+  CLI invocation: mint request_id, capture redacted args, execute
+  handler, classify exceptions via `exit_codes.classify_exception`, emit
+  structured stderr JSON on failure, write exactly one audit line
+  per invocation (success OR failure), propagate
+  `TRADING_STRATEGY_ID` / `TRADING_AGENT_ID` / `TRADING_PARENT_REQUEST_ID`.
+  Audit I/O failure never crashes the command.
+
+**Wiring into existing CLIs**:
+
+- `cli.py`, `ibkr_tool.py`, `flex_tool.py` `main()` now all route through
+  `cli_runner.run_command`. Every invocation is audited, every exception
+  becomes a structured stderr JSON, every exit code is classified.
+- Halt guards on every write command: `_cmd_place_order`,
+  `_cmd_place_bracket`, `_cmd_cancel_order`, `_cmd_modify_order`,
+  `_cmd_run` in `cli.py`; `cmd_place`, `cmd_combo`, `cmd_cancel`,
+  `cmd_cancel_all` in `ibkr_tool.py`. Read commands unchanged — agents
+  can still query state during a halt.
+- `cli.py place-order --idempotency-key KEY`: durable replay via
+  `IdempotencyStore` + BLAKE2b→orderRef derivation; IBKR broker uses
+  `IdempotentOrderPlacer` for the orderbook pre-check. Same key across
+  retries → stored result is replayed, `place_order` never re-transmits.
+- `cli.py halt` + `resume` subcommands: `halt --reason "..."
+  [--by ...] [--expires-in 1h]`; `resume --confirm-resume` (distinct
+  from `--yes` so an accidentally-replayed `halt` can't undo itself).
+
 ### Unreleased — IBKR CLIs + edge validation + ATLAS v7
 
 - **2026-04-14** `7f2a289` Add project trading rules (CLAUDE.md): paper/live port conventions, IBKR API usage rules, risk limit policy, self-improvement log.

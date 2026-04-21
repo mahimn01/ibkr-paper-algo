@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -121,6 +122,9 @@ def _assert_ibkr_order_authorized(cfg: TradingConfig, confirm_token: str | None)
 
 
 def _cmd_place_order(args: argparse.Namespace) -> int:
+    # Halt sentinel check — refuses writes while data/HALTED exists.
+    from trading_algo.halt import assert_not_halted
+    assert_not_halted()
     cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
     if args.broker == "ibkr":
         _assert_ibkr_order_authorized(cfg, args.confirm_token)
@@ -171,7 +175,64 @@ def _cmd_place_order(args: argparse.Namespace) -> int:
             oca_group=args.oca_group,
             transmit=not bool(args.no_transmit),
         )
-        result = broker.place_order(req)
+
+        # Idempotency path. If --idempotency-key is supplied, check a
+        # SQLite cache for a prior completed attempt with this key: if
+        # present, replay the stored result (never re-transmit). If the
+        # cache shows an in-flight attempt, fall through to the
+        # IdempotentOrderPlacer which will orderbook-check before
+        # retransmitting.
+        idem_key = getattr(args, "idempotency_key", None)
+        result = None
+        idem_store = None
+        if idem_key:
+            from trading_algo.idempotency import IdempotencyStore, derive_order_ref
+            idem_store = IdempotencyStore()
+            existing = idem_store.lookup(idem_key)
+            if existing is not None and existing.completed:
+                # Short-circuit replay — no broker call.
+                replayed = existing.result or {}
+                if isinstance(replayed, dict):
+                    print(
+                        f"orderId={replayed.get('order_id', existing.ib_order_id or '?')} "
+                        f"status={replayed.get('status', '?')} replayed=true"
+                    )
+                    return int(existing.exit_code or 0)
+            # Derive a deterministic orderRef from the key so cross-process
+            # retries produce the same orderRef and the orderbook check
+            # can find the in-flight order.
+            derived_ref = derive_order_ref(idem_key)
+            from dataclasses import replace
+            req = replace(req, order_ref=args.order_ref or derived_ref)
+            idem_store.record_attempt(
+                key=idem_key, cmd="place-order",
+                request={
+                    "symbol": args.symbol, "side": args.side,
+                    "qty": args.qty, "type": args.type,
+                    "limit_price": args.limit_price, "stop_price": args.stop_price,
+                },
+                order_ref=req.order_ref,
+            )
+
+        if idem_key and args.broker == "ibkr":
+            # Route through the idempotent placer so a crashed retry
+            # doesn't double-fill.
+            from trading_algo.broker.idempotent_placer import IdempotentOrderPlacer
+            placer = IdempotentOrderPlacer(broker)
+            result = placer.place(req, idempotency_key=idem_key)
+        else:
+            result = broker.place_order(req)
+
+        if idem_store and idem_key:
+            try:
+                idem_store.record_completion(
+                    key=idem_key,
+                    result={"order_id": result.order_id, "status": result.status},
+                    exit_code=0,
+                    ib_order_id=int(result.order_id) if str(result.order_id).isdigit() else None,
+                )
+            except Exception:
+                pass  # Audit should never fail the command.
         if store and run_id is not None:
             store.log_order(run_id, broker=args.broker, order_id=result.order_id, request=req, status=result.status)
             try:
@@ -261,6 +322,9 @@ def _cmd_history(args: argparse.Namespace) -> int:
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
+    # Halt sentinel check — refuses writes while data/HALTED exists.
+    from trading_algo.halt import assert_not_halted
+    assert_not_halted()
     cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
     cfg = TradingConfig(
         broker=args.broker,
@@ -310,6 +374,9 @@ def _cmd_order_status(args: argparse.Namespace) -> int:
 
 
 def _cmd_cancel_order(args: argparse.Namespace) -> int:
+    # Halt sentinel check — refuses writes while data/HALTED exists.
+    from trading_algo.halt import assert_not_halted
+    assert_not_halted()
     cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
     broker = _make_broker(args.broker, cfg)
     store = SqliteStore(cfg.db_path) if cfg.db_path else None
@@ -334,6 +401,9 @@ def _cmd_cancel_order(args: argparse.Namespace) -> int:
 
 
 def _cmd_modify_order(args: argparse.Namespace) -> int:
+    # Halt sentinel check — refuses writes while data/HALTED exists.
+    from trading_algo.halt import assert_not_halted
+    assert_not_halted()
     cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
     if args.broker == "ibkr":
         _assert_ibkr_order_authorized(cfg, args.confirm_token)
@@ -392,6 +462,9 @@ def _cmd_modify_order(args: argparse.Namespace) -> int:
 
 
 def _cmd_place_bracket(args: argparse.Namespace) -> int:
+    # Halt sentinel check — refuses writes while data/HALTED exists.
+    from trading_algo.halt import assert_not_halted
+    assert_not_halted()
     cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
     if args.broker == "ibkr":
         _assert_ibkr_order_authorized(cfg, args.confirm_token)
@@ -840,6 +913,628 @@ def _cmd_wheel_live(args: argparse.Namespace) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# T2.5 — watch / status / time (agent-ergonomics surface)
+# ---------------------------------------------------------------------------
+
+def _emit_t2_json(data: dict, cmd: str) -> None:
+    """Emit a single JSON blob. No envelope here — the cli_runner wraps
+    structured errors, but these commands already print JSON directly.
+    """
+    print(json.dumps(data, indent=2, default=str, ensure_ascii=False))
+
+
+def _cmd_watch(args: argparse.Namespace) -> int:
+    """Poll a named resource every N seconds; exit 0 with the snapshot when
+    `--until EXPR` evaluates True; exit 124 if the deadline elapses first.
+
+    Resources:
+      quote   --symbol AAPL         → bid/ask/last/close/volume
+      order   --order-id 12345      → latest order status
+      position --symbol AAPL        → latest broker position snapshot
+
+    EXPR is a restricted Python expression evaluated against the snapshot
+    dict (see watch_expr.py). Examples:
+      --until "last > 150"
+      --until "status == 'Filled'"
+      --until "filled_quantity >= 100"
+    """
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    import time as _time
+    from trading_algo.exit_codes import TIMEOUT
+    from trading_algo.watch_expr import UnsafeExpression, evaluate
+
+    resource: str = args.resource
+    interval = max(0.2, float(args.every))
+    timeout = float(args.timeout)
+    deadline = _time.monotonic() + timeout if timeout > 0 else float("inf")
+
+    # Pre-validate --until so a typo doesn't waste polls.
+    try:
+        evaluate(args.until, {})
+    except UnsafeExpression as exc:
+        print(f"ERROR: unsafe --until expression: {exc}", file=sys.stderr)
+        return 2
+    except SyntaxError as exc:
+        print(f"ERROR: --until does not parse: {exc}", file=sys.stderr)
+        return 2
+    except Exception:
+        # Tolerated — may only succeed once a field is bound.
+        pass
+
+    cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
+    broker = _make_broker(args.broker, cfg)
+    broker.connect()
+
+    def _fetch_quote() -> dict:
+        instrument = validate_instrument(
+            InstrumentSpec(
+                kind=args.kind,
+                symbol=args.symbol,
+                exchange=args.exchange,
+                currency=args.currency,
+                expiry=args.expiry,
+                right=getattr(args, "right", None),
+                strike=(float(args.strike) if getattr(args, "strike", None) is not None else None),
+                multiplier=getattr(args, "multiplier", None),
+            )
+        )
+        snap = broker.get_market_data_snapshot(instrument)
+        return {
+            "symbol": snap.instrument.symbol,
+            "bid": snap.bid,
+            "ask": snap.ask,
+            "last": snap.last,
+            "close": snap.close,
+            "volume": snap.volume,
+            "timestamp_epoch_s": snap.timestamp_epoch_s,
+        }
+
+    def _fetch_order() -> dict:
+        oid = int(args.order_id)
+        statuses = broker.get_order_statuses() if hasattr(broker, "get_order_statuses") else {}
+        row = statuses.get(oid) or statuses.get(str(oid)) or {}
+        return {
+            "order_id": oid,
+            "status": row.get("status"),
+            "filled": row.get("filled"),
+            "remaining": row.get("remaining"),
+            "avg_fill_price": row.get("avg_fill_price") or row.get("avgFillPrice"),
+        }
+
+    def _fetch_position() -> dict:
+        positions = broker.get_positions() if hasattr(broker, "get_positions") else []
+        for p in positions or []:
+            sym = p.get("symbol") if isinstance(p, dict) else getattr(p, "symbol", None)
+            if sym == args.symbol:
+                if isinstance(p, dict):
+                    return {"symbol": sym, **p}
+                return {
+                    "symbol": sym,
+                    "position": getattr(p, "position", None),
+                    "avg_cost": getattr(p, "avg_cost", None),
+                    "market_value": getattr(p, "market_value", None),
+                    "unrealized_pnl": getattr(p, "unrealized_pnl", None),
+                }
+        return {"symbol": args.symbol, "position": 0}
+
+    fetchers = {"quote": _fetch_quote, "order": _fetch_order, "position": _fetch_position}
+    fetch = fetchers.get(resource)
+    if fetch is None:
+        broker.disconnect()
+        print(f"ERROR: unknown watch resource: {resource!r}", file=sys.stderr)
+        return 2
+
+    last_snapshot: dict = {}
+    polls = 0
+    try:
+        while _time.monotonic() < deadline:
+            try:
+                last_snapshot = fetch()
+            except Exception as exc:
+                logging.getLogger(__name__).warning("watch poll failed: %s", exc)
+            polls += 1
+            try:
+                if evaluate(args.until, last_snapshot):
+                    _emit_t2_json(
+                        {
+                            "matched": True,
+                            "polls": polls,
+                            "snapshot": last_snapshot,
+                            "expression": args.until,
+                        },
+                        cmd="watch",
+                    )
+                    return 0
+            except Exception as exc:
+                logging.getLogger(__name__).debug("watch eval failed: %s", exc)
+            remaining = deadline - _time.monotonic()
+            if remaining <= 0:
+                break
+            _time.sleep(min(interval, remaining))
+    finally:
+        try:
+            broker.disconnect()
+        except Exception:
+            pass
+
+    _emit_t2_json(
+        {
+            "matched": False,
+            "polls": polls,
+            "snapshot": last_snapshot,
+            "expression": args.until,
+            "reason": "timeout",
+        },
+        cmd="watch",
+    )
+    return TIMEOUT
+
+
+def _cmd_status(args: argparse.Namespace) -> int:
+    """One JSON blob summarising the state of the world for an agent loop:
+    broker connectivity, config (paper/live/dry-run), halt state, market
+    hours, open-orders/positions counts. Each section independent — a
+    missing section becomes null instead of failing the whole call.
+    """
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    from trading_algo.market_rules import market_state
+
+    cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
+
+    # Broker section ------------------------------------------------------
+    broker_block: dict = {
+        "kind": args.broker,
+        "host": cfg.ibkr.host,
+        "port": cfg.ibkr.port,
+        "client_id": cfg.ibkr.client_id,
+        "connected": None,
+        "paper": cfg.ibkr.port == 4002,
+    }
+    account_block: dict = {
+        "net_liquidation": None,
+        "buying_power": None,
+        "open_orders": None,
+        "open_positions": None,
+    }
+    if args.broker == "ibkr" and not getattr(args, "skip_broker", False):
+        try:
+            broker = _make_broker(args.broker, cfg)
+            broker.connect()
+            broker_block["connected"] = True
+            try:
+                acct = broker.get_account_summary() if hasattr(broker, "get_account_summary") else {}
+                account_block["net_liquidation"] = acct.get("NetLiquidation")
+                account_block["buying_power"] = acct.get("BuyingPower")
+            except Exception:
+                pass
+            try:
+                orders = broker.get_open_orders() if hasattr(broker, "get_open_orders") else []
+                account_block["open_orders"] = len(orders or [])
+            except Exception:
+                pass
+            try:
+                positions = broker.get_positions() if hasattr(broker, "get_positions") else []
+                account_block["open_positions"] = sum(
+                    1 for p in (positions or [])
+                    if (p.get("position") if isinstance(p, dict) else getattr(p, "position", 0)) not in (0, None)
+                )
+            except Exception:
+                pass
+            broker.disconnect()
+        except Exception as exc:
+            broker_block["connected"] = False
+            broker_block["error"] = f"{type(exc).__name__}: {exc}"
+
+    # Market section ------------------------------------------------------
+    market_block = market_state()
+
+    # Config section ------------------------------------------------------
+    config_block = {
+        "dry_run": cfg.dry_run,
+        "live_enabled": cfg.live_enabled,
+        "allow_live": cfg.allow_live,
+        "require_paper": cfg.require_paper,
+        "confirm_token_required": cfg.confirm_token_required,
+        "poll_seconds": cfg.poll_seconds,
+        "db_path": cfg.db_path or None,
+    }
+
+    # Halt section --------------------------------------------------------
+    from trading_algo.halt import read_halt
+    halt_state = read_halt()
+    halt_block: dict = {"is_halted": halt_state is not None}
+    if halt_state is not None:
+        halt_block.update(halt_state.to_dict())
+
+    out = {
+        "broker": broker_block,
+        "account": account_block,
+        "market": market_block,
+        "config": config_block,
+        "halt": halt_block,
+    }
+    _emit_t2_json(out, cmd="status")
+    return 0
+
+
+def _cmd_time(args: argparse.Namespace) -> int:
+    """Emit all the clocks an agent needs to plan actions. No broker call."""
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    from trading_algo.market_rules import market_state
+    _emit_t2_json(market_state(), cmd="time")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# T2.6 — events + reconcile (agent-first JSON surface)
+# ---------------------------------------------------------------------------
+
+def _cmd_events(args: argparse.Namespace) -> int:
+    """Read the SEC-17a-4 NDJSON audit log under data/audit/*.jsonl.
+
+    Agents reconstruct their own history after a crash, verify a request_id
+    actually ran, or diff their assumptions against what really happened.
+    No broker call — purely local file read.
+
+    Filters:
+      --since YYYY-MM-DD    inclusive lower date bound (local)
+      --until YYYY-MM-DD    inclusive upper date bound (local)
+      --cmd NAME            only entries for this subcommand
+      --outcome ok|error    exit_code==0 vs non-zero
+      --tail N              last N matching entries only
+    """
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    from datetime import date
+    from trading_algo.audit import iter_entries, tail as audit_tail
+
+    def _parse_day(raw: str | None) -> date | None:
+        if not raw:
+            return None
+        try:
+            return date.fromisoformat(raw)
+        except ValueError as exc:
+            raise SystemExit(f"--since/--until must be YYYY-MM-DD: {raw!r} ({exc})")
+
+    since = _parse_day(getattr(args, "since", None))
+    until = _parse_day(getattr(args, "until", None))
+    cmd_filter = getattr(args, "cmd_filter", None)
+    outcome = getattr(args, "outcome", None)
+    tail_n = getattr(args, "tail", None)
+
+    if tail_n is not None and int(tail_n) > 0:
+        entries = audit_tail(int(tail_n), cmd=cmd_filter, outcome=outcome)
+        if since or until:
+            entries = [
+                e for e in entries
+                if (not since or (e.get("ts") and date.fromisoformat(e["ts"][:10]) >= since))
+                and (not until or (e.get("ts") and date.fromisoformat(e["ts"][:10]) <= until))
+            ]
+    else:
+        entries = list(iter_entries(
+            since=since, until=until, cmd=cmd_filter, outcome=outcome,
+        ))
+
+    # --fields / --summary projection (T2.7).
+    projected = _maybe_project_and_summarize(entries, args, summarizer=None)
+    if getattr(args, "summary", False):
+        # Minimal rollup: count + distinct cmds + outcome breakdown.
+        from collections import Counter
+        cmds = Counter(e.get("cmd") for e in entries)
+        outcomes = {
+            "ok": sum(1 for e in entries if e.get("exit_code") == 0),
+            "error": sum(1 for e in entries if e.get("exit_code") not in (0, None)),
+        }
+        projected = {
+            "count": len(entries),
+            "by_cmd": dict(cmds),
+            "outcome": outcomes,
+        }
+        _emit_t2_json(projected, cmd="events")
+        return 0
+    _emit_t2_json({"count": len(entries), "entries": projected}, cmd="events")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# T2.7 — --explain / tools-describe / --fields / --summary
+# ---------------------------------------------------------------------------
+
+def _maybe_handle_explain(args: argparse.Namespace) -> int | None:
+    """If `--explain` was passed, emit explain(cmd) JSON and short-circuit.
+
+    Returns an exit code to return from the handler, or None if normal
+    execution should proceed.
+    """
+    if not getattr(args, "explain", False):
+        return None
+    from trading_algo.explain import explain
+    cmd_name = getattr(args, "cmd", None) or "unknown"
+    _emit_t2_json({"cmd": cmd_name, "explanation": explain(cmd_name)}, cmd="explain")
+    return 0
+
+
+def _cmd_tools_describe(args: argparse.Namespace) -> int:
+    """Emit the JSONSchema array for every subcommand — agents use this
+    to auto-generate tool/function definitions for LLM tool calling.
+    """
+    from trading_algo.tool_schema import describe_tools
+    tools = describe_tools(build_parser())
+    _emit_t2_json({"count": len(tools), "tools": tools}, cmd="tools-describe")
+    return 0
+
+
+def _maybe_project_and_summarize(
+    rows: list[dict],
+    args: argparse.Namespace,
+    summarizer=None,
+) -> list[dict] | dict:
+    """Apply --fields / --summary to list-of-dict output.
+
+    Precedence: --summary wins over --fields if both are set.
+    """
+    from trading_algo.projection import parse_fields, project_rows
+
+    if getattr(args, "summary", False) and summarizer is not None:
+        return summarizer(rows)
+    fields = parse_fields(getattr(args, "fields", None))
+    if fields:
+        return project_rows(rows, fields)
+    return rows
+
+
+def _cmd_stream(args: argparse.Namespace) -> int:
+    """Stream market-data snapshots as NDJSON to stdout (and optionally
+    a buffer file) until `--duration` expires or SIGINT.
+
+    This is a poll-based stream — each tick is one broker snapshot,
+    rate-limited by `--every` seconds and by the IBKR rate-limit layer.
+    For turn-based agents it's cheaper than an open WebSocket:
+
+      - Fire `stream --buffer-to ticks.ndjson --duration 60` in a
+        subprocess.
+      - When the turn ends, use `tail-ticks --file ticks.ndjson
+        --from-seq N` to consume only the newly-appended ticks.
+
+    Each emitted line carries `_seq` (monotonic) and `_ts_epoch_ms` so
+    downstream consumers can dedupe / resume cleanly.
+    """
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    import time as _time
+    from trading_algo.exit_codes import TIMEOUT
+
+    cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
+    broker = _make_broker(args.broker, cfg)
+    broker.connect()
+
+    interval = max(0.2, float(args.every))
+    duration = float(args.duration)
+    deadline = _time.monotonic() + duration if duration > 0 else float("inf")
+
+    instrument = validate_instrument(
+        InstrumentSpec(
+            kind=args.kind, symbol=args.symbol,
+            exchange=args.exchange, currency=args.currency,
+            expiry=args.expiry, right=getattr(args, "right", None),
+            strike=(float(args.strike) if getattr(args, "strike", None) is not None else None),
+            multiplier=getattr(args, "multiplier", None),
+        )
+    )
+
+    buf_fh = None
+    if getattr(args, "buffer_to", None):
+        from pathlib import Path
+        p = Path(args.buffer_to)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        buf_fh = open(p, "a", encoding="utf-8", buffering=1)  # line-buffered
+
+    seq = 0
+    try:
+        while _time.monotonic() < deadline:
+            try:
+                snap = broker.get_market_data_snapshot(instrument)
+                seq += 1
+                payload = {
+                    "_seq": seq,
+                    "_ts_epoch_ms": int(_time.time() * 1000),
+                    "symbol": snap.instrument.symbol,
+                    "bid": snap.bid, "ask": snap.ask, "last": snap.last,
+                    "close": snap.close, "volume": snap.volume,
+                    "timestamp_epoch_s": snap.timestamp_epoch_s,
+                }
+                line = json.dumps(payload, default=str, ensure_ascii=False)
+                print(line, flush=True)
+                if buf_fh is not None:
+                    buf_fh.write(line + "\n")
+            except Exception as exc:
+                logging.getLogger(__name__).warning("stream tick failed: %s", exc)
+            remaining = deadline - _time.monotonic()
+            if remaining <= 0:
+                break
+            _time.sleep(min(interval, remaining))
+        return 0
+    finally:
+        if buf_fh is not None:
+            try:
+                buf_fh.close()
+            except Exception:
+                pass
+        try:
+            broker.disconnect()
+        except Exception:
+            pass
+
+
+def _cmd_tail_ticks(args: argparse.Namespace) -> int:
+    """Read ticks from a `stream --buffer-to` file, optionally starting
+    at `--from-seq` and limiting to `--max` lines.
+
+    No broker call. Safe to run concurrently with the producer — the
+    buffer file is line-buffered.
+    """
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    from pathlib import Path
+
+    path = Path(args.file)
+    if not path.exists():
+        _emit_t2_json({"count": 0, "ticks": []}, cmd="tail-ticks")
+        return 0
+    from_seq = int(getattr(args, "from_seq", 0) or 0)
+    max_n = getattr(args, "max", None)
+
+    matching: list[dict] = []
+    with open(path, "r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            seq = entry.get("_seq", 0)
+            if seq > from_seq:
+                matching.append(entry)
+    if max_n is not None:
+        matching = matching[-int(max_n):]
+    last_seq = matching[-1].get("_seq") if matching else from_seq
+    _emit_t2_json(
+        {"count": len(matching), "last_seq": last_seq, "ticks": matching},
+        cmd="tail-ticks",
+    )
+    return 0
+
+
+def _cmd_groups_list(args: argparse.Namespace) -> int:
+    """List distinct groups observed in the OMS DB."""
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
+    if not cfg.db_path:
+        raise SystemExit("groups-list requires TRADING_DB_PATH to be set")
+    store = SqliteStore(cfg.db_path)
+    try:
+        groups = store.list_groups()
+    finally:
+        store.close()
+    _emit_t2_json({"count": len(groups), "groups": groups}, cmd="groups-list")
+    return 0
+
+
+def _cmd_groups_show(args: argparse.Namespace) -> int:
+    """Show every order in a given group_id."""
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
+    if not cfg.db_path:
+        raise SystemExit("groups-show requires TRADING_DB_PATH to be set")
+    store = SqliteStore(cfg.db_path)
+    try:
+        orders = store.orders_by_group(args.group_id)
+    finally:
+        store.close()
+    _emit_t2_json(
+        {"group_id": args.group_id, "count": len(orders), "orders": orders},
+        cmd="groups-show",
+    )
+    return 0
+
+
+def _cmd_reconcile(args: argparse.Namespace) -> int:
+    """Reconcile OMS's view of open orders with broker's live openTrades().
+
+    A structured, agent-consumable version of `oms-reconcile`. Same
+    underlying engine logic (OrderManager.reconcile) but emits JSON.
+
+    Requires TRADING_DB_PATH to be set — reconcile only makes sense when
+    the OMS has persistent state to reconcile against.
+    """
+    rc = _maybe_handle_explain(args)
+    if rc is not None:
+        return rc
+    cfg = _apply_cli_overrides(TradingConfig.from_env(), args)
+    if not cfg.db_path:
+        raise SystemExit("reconcile requires TRADING_DB_PATH to be set")
+    broker = _make_broker(args.broker, cfg)
+    broker.connect()
+    try:
+        oms = OrderManager(broker, cfg, confirm_token=args.confirm_token)
+        try:
+            res = oms.reconcile()
+        finally:
+            oms.close()
+        entries = []
+        for oid, st in (res or {}).items():
+            entries.append({"order_id": oid, "status": st})
+        out = {
+            "reconciled_count": len(entries),
+            "orders": entries,
+        }
+        _emit_t2_json(out, cmd="reconcile")
+        return 0
+    finally:
+        broker.disconnect()
+
+
+def _cmd_halt(args: argparse.Namespace) -> int:
+    """Write the HALTED sentinel. Every subsequent write command refuses
+    until the sentinel is removed. Safe to call while already halted (the
+    new reason / expires-in overwrite the existing sentinel).
+    """
+    from trading_algo.halt import parse_duration, write_halt
+
+    expires_seconds: float | None = None
+    if getattr(args, "expires_in", None):
+        try:
+            expires_seconds = parse_duration(args.expires_in)
+        except ValueError as exc:
+            print(f"ERROR: --expires-in: {exc}", file=sys.stderr)
+            return 2
+
+    state = write_halt(
+        reason=args.reason,
+        by=(args.by or os.getenv("TRADING_OPERATOR", "operator")),
+        expires_in_seconds=expires_seconds,
+    )
+    out = state.to_dict()
+    out["halted"] = True
+    print(json.dumps(out, indent=2, default=str))
+    return 0
+
+
+def _cmd_resume(args: argparse.Namespace) -> int:
+    """Clear the HALTED sentinel. Requires --confirm-resume — distinct
+    from --yes so a replayed `halt --yes` can't accidentally lift the halt.
+    """
+    from trading_algo.halt import clear_halt
+
+    if not getattr(args, "confirm_resume", False):
+        print(
+            "ERROR: `resume` requires --confirm-resume. This is "
+            "intentionally a different token from --yes to prevent an "
+            "accidental lift of a halt.",
+            file=sys.stderr,
+        )
+        return 2
+    cleared = clear_halt()
+    print(json.dumps({"resumed": cleared}, indent=2))
+    return 0
+
+
 def _cmd_chat(args: argparse.Namespace) -> int:
     from trading_algo.llm.chat import main as chat_main
 
@@ -919,6 +1614,13 @@ def build_parser() -> argparse.ArgumentParser:
     place.add_argument("--order-ref", default=None)
     place.add_argument("--oca-group", default=None)
     place.add_argument("--no-transmit", action="store_true", help="Create order with transmit=false (advanced)")
+    place.add_argument(
+        "--idempotency-key", default=None, metavar="KEY",
+        help="Durable idempotency key. On retry with the same key, replay the "
+             "prior result from data/idempotency.sqlite (never re-transmit). "
+             "BLAKE2b-derived into an IBKR orderRef so orderbook-based dedup "
+             "works across process restarts. Required for crash-safe retries.",
+    )
     place.set_defaults(func=_cmd_place_order)
 
     snap = sub.add_parser("snapshot", help="Fetch a market data snapshot")
@@ -1051,6 +1753,169 @@ def build_parser() -> argparse.ArgumentParser:
     bt.add_argument("--db-path", default=None)
     bt.set_defaults(func=_cmd_backtest)
 
+    # --- T2.5: watch / status / time ---
+    watch_p = sub.add_parser(
+        "watch",
+        help="Poll a resource until a restricted expression is True (exit 124 on timeout)",
+    )
+    watch_p.add_argument("--broker", choices=["ibkr", "sim"], default="ibkr")
+    watch_p.add_argument(
+        "--resource", choices=["quote", "order", "position"], required=True,
+        help="What to poll: quote (market data), order (by id), position (by symbol)",
+    )
+    watch_p.add_argument("--symbol", default=None, help="Symbol for quote/position resources")
+    watch_p.add_argument("--kind", choices=["STK", "FUT", "FX", "OPT"], default="STK")
+    watch_p.add_argument("--exchange", default=None)
+    watch_p.add_argument("--currency", default=None)
+    watch_p.add_argument("--expiry", default=None)
+    watch_p.add_argument("--right", choices=["C", "P"], default=None)
+    watch_p.add_argument("--strike", default=None)
+    watch_p.add_argument("--multiplier", default=None)
+    watch_p.add_argument("--order-id", default=None, help="Order id (order resource)")
+    watch_p.add_argument(
+        "--until", required=True,
+        help="Restricted Python expression over the snapshot (e.g. 'last > 150', "
+             "'status == \"Filled\"'). Only compare/logic/arith ops are allowed.",
+    )
+    watch_p.add_argument("--every", type=float, default=2.0,
+                         help="Poll interval seconds (min 0.2)")
+    watch_p.add_argument("--timeout", type=float, default=60.0,
+                         help="Max seconds to poll before giving up (exit 124)")
+    watch_p.add_argument("--explain", action="store_true",
+                         help="Print the command's explanation and exit 0 without running it")
+    watch_p.set_defaults(func=_cmd_watch)
+
+    status_p = sub.add_parser(
+        "status",
+        help="One JSON blob: broker connectivity, config, halt state, market hours",
+    )
+    status_p.add_argument("--broker", choices=["ibkr", "sim"], default="ibkr")
+    status_p.add_argument("--skip-broker", action="store_true",
+                          help="Skip broker connect (config + market + halt only)")
+    status_p.add_argument("--explain", action="store_true",
+                          help="Print the command's explanation and exit 0 without running it")
+    status_p.set_defaults(func=_cmd_status)
+
+    time_p = sub.add_parser(
+        "time",
+        help="Emit clocks — UTC, ET, market open/close, weekday (no broker call)",
+    )
+    time_p.add_argument("--explain", action="store_true",
+                        help="Print the command's explanation and exit 0 without running it")
+    time_p.set_defaults(func=_cmd_time)
+
+    # --- T2.6: events + reconcile ---
+    events_p = sub.add_parser(
+        "events",
+        help="Read the local NDJSON audit log (data/audit/*.jsonl). No broker call.",
+    )
+    events_p.add_argument("--since", default=None, help="Inclusive lower date bound (YYYY-MM-DD)")
+    events_p.add_argument("--until", default=None, help="Inclusive upper date bound (YYYY-MM-DD)")
+    events_p.add_argument("--cmd-filter", dest="cmd_filter", default=None,
+                          help="Only entries where cmd==NAME")
+    events_p.add_argument("--outcome", choices=["ok", "error"], default=None,
+                          help="ok = exit_code 0; error = non-zero")
+    events_p.add_argument("--tail", type=int, default=None,
+                          help="Only the most recent N matching entries")
+    events_p.add_argument("--fields", default=None,
+                          help="Comma-separated keys to keep per entry (e.g. 'ts,cmd,exit_code')")
+    events_p.add_argument("--summary", action="store_true",
+                          help="Emit roll-up (count + by-cmd + outcome) instead of entries")
+    events_p.add_argument("--explain", action="store_true",
+                          help="Print the command's explanation and exit 0 without running it")
+    events_p.set_defaults(func=_cmd_events)
+
+    rec2_p = sub.add_parser(
+        "reconcile",
+        help="Reconcile OMS DB with broker openTrades (JSON output, agent-friendly)",
+    )
+    rec2_p.add_argument("--broker", choices=["ibkr", "sim"], default="ibkr")
+    rec2_p.add_argument("--explain", action="store_true",
+                        help="Print the command's explanation and exit 0 without running it")
+    rec2_p.set_defaults(func=_cmd_reconcile)
+
+    td_p = sub.add_parser(
+        "tools-describe",
+        help="Emit JSONSchema for every subcommand — agents build tool-call specs from this",
+    )
+    td_p.set_defaults(func=_cmd_tools_describe)
+
+    # --- T4.2: order groups ---
+    gl_p = sub.add_parser(
+        "groups-list",
+        help="List distinct group_ids in the OMS DB (baskets, bracket legs, etc.)",
+    )
+    gl_p.add_argument("--explain", action="store_true",
+                      help="Print explanation and exit 0 without running")
+    gl_p.set_defaults(func=_cmd_groups_list)
+
+    gs_p = sub.add_parser(
+        "groups-show",
+        help="Show every order in a given group_id",
+    )
+    gs_p.add_argument("--group-id", required=True, dest="group_id")
+    gs_p.add_argument("--explain", action="store_true",
+                      help="Print explanation and exit 0 without running")
+    gs_p.set_defaults(func=_cmd_groups_show)
+
+    # --- T4.3: stream / tail-ticks ---
+    stream_p = sub.add_parser(
+        "stream",
+        help="Poll market-data snapshots and emit NDJSON ticks (optionally to a buffer file)",
+    )
+    stream_p.add_argument("--broker", choices=["ibkr", "sim"], default="ibkr")
+    stream_p.add_argument("--symbol", required=True)
+    stream_p.add_argument("--kind", choices=["STK", "FUT", "FX", "OPT"], default="STK")
+    stream_p.add_argument("--exchange", default=None)
+    stream_p.add_argument("--currency", default=None)
+    stream_p.add_argument("--expiry", default=None)
+    stream_p.add_argument("--right", choices=["C", "P"], default=None)
+    stream_p.add_argument("--strike", default=None)
+    stream_p.add_argument("--multiplier", default=None)
+    stream_p.add_argument("--every", type=float, default=1.0,
+                          help="Poll interval seconds (min 0.2)")
+    stream_p.add_argument("--duration", type=float, default=60.0,
+                          help="Stream duration seconds; <=0 means forever (SIGINT to stop)")
+    stream_p.add_argument("--buffer-to", dest="buffer_to", default=None,
+                          help="Append NDJSON ticks to this file (created if missing)")
+    stream_p.add_argument("--explain", action="store_true",
+                          help="Print explanation and exit 0 without running")
+    stream_p.set_defaults(func=_cmd_stream)
+
+    tt_p = sub.add_parser(
+        "tail-ticks",
+        help="Read a stream --buffer-to file; emit only ticks after --from-seq (no broker call)",
+    )
+    tt_p.add_argument("--file", required=True, help="Path to an NDJSON buffer produced by `stream --buffer-to`")
+    tt_p.add_argument("--from-seq", dest="from_seq", type=int, default=0,
+                      help="Only include ticks with _seq > this value")
+    tt_p.add_argument("--max", type=int, default=None, help="Cap at the last N matching ticks")
+    tt_p.add_argument("--explain", action="store_true",
+                      help="Print explanation and exit 0 without running")
+    tt_p.set_defaults(func=_cmd_tail_ticks)
+
+    # --- kill switch (halt / resume) ---
+    halt_p = sub.add_parser(
+        "halt",
+        help="Write the HALTED sentinel — refuses all write commands until cleared",
+    )
+    halt_p.add_argument("--reason", required=True,
+                        help="Short description of why trading is halted (stored in sentinel)")
+    halt_p.add_argument("--by", default=None,
+                        help="Operator / agent identifier. Defaults to $TRADING_OPERATOR or 'operator'.")
+    halt_p.add_argument("--expires-in", default=None, metavar="DURATION",
+                        help="Auto-clear after duration (e.g. 30s, 5m, 1h, 2d). "
+                             "Without this flag the halt persists until `resume`.")
+    halt_p.set_defaults(func=_cmd_halt)
+
+    resume_p = sub.add_parser(
+        "resume",
+        help="Clear the HALTED sentinel (requires --confirm-resume)",
+    )
+    resume_p.add_argument("--confirm-resume", action="store_true",
+                          help="Required. Distinct from --yes to prevent accidental resume.")
+    resume_p.set_defaults(func=_cmd_resume)
+
     exp = sub.add_parser("export-history", help="Export IBKR historical bars to a backtest CSV")
     exp.add_argument("--broker", choices=["ibkr"], default="ibkr")
     exp.add_argument("--kind", choices=["STK", "FUT", "FX", "OPT"], default="STK")
@@ -1160,7 +2025,15 @@ def main(argv: list[str] | None = None) -> int:
         configure_logging(level=log_level)
     logging.getLogger(__name__).debug("Loaded config: %s", cfg)
 
-    return int(args.func(args))
+    # TUI mode owns the terminal — bypass the structured runner (stderr
+    # writes would corrupt the full-screen UI).
+    if tui_mode:
+        return int(args.func(args))
+
+    # Every other invocation: audit + structured errors + exit-code
+    # classification via the shared runner.
+    from trading_algo.cli_runner import run_command
+    return run_command(args, default_cmd_name="cli")
 
 
 if __name__ == "__main__":

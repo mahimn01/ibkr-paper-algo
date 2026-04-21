@@ -37,9 +37,15 @@ class Engine:
             self._run_id = self._store.start_run(self.config)
         try:
             while True:
-                ctx = self._build_context()
-                intents = self.strategy.on_tick(ctx)
-                self._handle_intents(ctx, intents)
+                try:
+                    ctx = self._build_context()
+                    intents = self.strategy.on_tick(ctx)
+                    self._handle_intents(ctx, intents)
+                except Exception as exc:
+                    if _should_auto_halt(exc):
+                        self._auto_halt_on_connection_lost(exc)
+                        break
+                    raise
                 time.sleep(self.config.poll_seconds)
         finally:
             self._md = None
@@ -162,3 +168,62 @@ class Engine:
 
 def default_risk_manager() -> RiskManager:
     return RiskManager(RiskLimits())
+
+
+# ---------------------------------------------------------------------------
+# T3.6 — Engine ConnectionLost → auto-halt
+# ---------------------------------------------------------------------------
+
+# IBKR error codes that indicate the engine cannot trust its view of the
+# world. On any of these, writes must stop until a human confirms the
+# system is reconnected and the order book has been reconciled.
+_CONNECTION_LOST_CODES = frozenset({1100, 1101, 1102, 1300, 502, 504})
+
+
+def _should_auto_halt(exc: BaseException) -> bool:
+    """True if `exc` indicates loss of broker connectivity severe enough
+    that subsequent write operations would be unsafe.
+
+    Triggers on:
+      - Our wrapper IBKRConnectionError / IBKRCircuitOpenError
+      - ib_async exceptions carrying errorCode in _CONNECTION_LOST_CODES
+      - ConnectionError / ConnectionResetError
+    """
+    name = type(exc).__name__
+    if name in ("IBKRConnectionError", "IBKRCircuitOpenError"):
+        return True
+    if isinstance(exc, (ConnectionError, ConnectionResetError)):
+        return True
+    # Try to extract IBKR errorCode.
+    from trading_algo.exit_codes import _extract_ib_error_code
+    code = _extract_ib_error_code(exc)
+    if code is not None and code in _CONNECTION_LOST_CODES:
+        return True
+    return False
+
+
+def _auto_halt(reason: str, exc: BaseException) -> None:
+    """Write the halt sentinel with a machine-readable marker that this
+    halt was auto-triggered by the engine. Safe to call while already
+    halted — write_halt overwrites.
+    """
+    from trading_algo.halt import write_halt
+    try:
+        write_halt(
+            reason=f"auto:{reason}: {type(exc).__name__}: {exc}"[:256],
+            by="engine-auto",
+        )
+    except Exception as halt_exc:  # never let auto-halt I/O crash the process
+        log.error("Failed to write halt sentinel: %s", halt_exc)
+
+
+def _Engine_auto_halt_on_connection_lost(self, exc: BaseException) -> None:  # noqa: N802
+    log.error(
+        "Engine auto-halt triggered by connection-lost condition: %s", exc,
+    )
+    _auto_halt("ConnectionLost", exc)
+    self._persist_error("engine-auto-halt", str(exc))
+
+
+# Bind as method.
+Engine._auto_halt_on_connection_lost = _Engine_auto_halt_on_connection_lost

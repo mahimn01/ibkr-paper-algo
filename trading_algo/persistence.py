@@ -66,12 +66,22 @@ class SqliteStore:
         order_id: str,
         request: OrderRequest,
         status: str,
+        perm_id: str | None = None,
+        order_ref: str | None = None,
+        account: str | None = None,
+        strategy_id: str | None = None,
+        agent_id: str | None = None,
+        group_id: str | None = None,
+        idempotency_key: str | None = None,
     ) -> None:
         req_n = request.normalized()
         inst = req_n.instrument
         self._conn.execute(
-            "INSERT INTO orders(run_id, ts_epoch_s, broker, order_id, instrument_kind, instrument_symbol, side, quantity, order_type, request_json, status) "
-            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO orders("
+            "run_id, ts_epoch_s, broker, order_id, instrument_kind, instrument_symbol, "
+            "side, quantity, order_type, request_json, status, "
+            "perm_id, order_ref, account, strategy_id, agent_id, group_id, idempotency_key"
+            ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 int(run_id),
                 time.time(),
@@ -84,9 +94,58 @@ class SqliteStore:
                 str(req_n.order_type),
                 json.dumps(_to_jsonable(asdict(req_n)), sort_keys=True),
                 str(status),
+                perm_id,
+                order_ref,
+                account,
+                strategy_id,
+                agent_id,
+                group_id,
+                idempotency_key,
             ),
         )
         self._conn.commit()
+
+    # ------------------------------------------------------------------
+    # T4.1 accessors for richer order lookups
+    # ------------------------------------------------------------------
+
+    def orders_by_group(self, group_id: str) -> list[dict]:
+        """Return all order rows in a group ordered by ts ascending."""
+        cur = self._conn.execute(
+            "SELECT id, run_id, ts_epoch_s, broker, order_id, "
+            "instrument_kind, instrument_symbol, side, quantity, order_type, "
+            "status, perm_id, order_ref, account, strategy_id, agent_id, "
+            "group_id, idempotency_key "
+            "FROM orders WHERE group_id=? ORDER BY ts_epoch_s ASC, id ASC",
+            (str(group_id),),
+        )
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+    def list_groups(self) -> list[dict]:
+        """Aggregate summary of every distinct group_id seen."""
+        cur = self._conn.execute(
+            "SELECT group_id, COUNT(*) AS n, "
+            "MIN(ts_epoch_s) AS first_ts, MAX(ts_epoch_s) AS last_ts, "
+            "GROUP_CONCAT(DISTINCT status) AS statuses "
+            "FROM orders WHERE group_id IS NOT NULL GROUP BY group_id "
+            "ORDER BY MAX(ts_epoch_s) DESC"
+        )
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+    def order_by_idempotency_key(self, key: str) -> dict | None:
+        """Return the most recent order row matching `idempotency_key`."""
+        cur = self._conn.execute(
+            "SELECT id, order_id, status, ts_epoch_s FROM orders "
+            "WHERE idempotency_key=? ORDER BY ts_epoch_s DESC, id DESC LIMIT 1",
+            (str(key),),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return None
+        cols = [d[0] for d in cur.description]
+        return dict(zip(cols, row))
 
     def update_order_status(self, order_id: str, status: str) -> None:
         self._conn.execute("UPDATE orders SET status=? WHERE order_id=?", (str(status), str(order_id)))
@@ -192,6 +251,13 @@ class SqliteStore:
                 order_type TEXT,
                 request_json TEXT NOT NULL,
                 status TEXT NOT NULL,
+                perm_id TEXT,
+                order_ref TEXT,
+                account TEXT,
+                strategy_id TEXT,
+                agent_id TEXT,
+                group_id TEXT,
+                idempotency_key TEXT,
                 FOREIGN KEY(run_id) REFERENCES runs(id)
             );
 
@@ -234,10 +300,32 @@ class SqliteStore:
             );
             """
         )
+        # T4.1 — idempotent migration: older DBs won't have these columns yet.
+        self._add_column_if_missing("orders", "perm_id", "TEXT")
+        self._add_column_if_missing("orders", "order_ref", "TEXT")
+        self._add_column_if_missing("orders", "account", "TEXT")
+        self._add_column_if_missing("orders", "strategy_id", "TEXT")
+        self._add_column_if_missing("orders", "agent_id", "TEXT")
+        self._add_column_if_missing("orders", "group_id", "TEXT")
+        self._add_column_if_missing("orders", "idempotency_key", "TEXT")
+        # Indexes (safe once columns exist).
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orders_group_id ON orders(group_id)"
+        )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orders_idempotency_key ON orders(idempotency_key)"
+        )
+
         cur = self._conn.execute("SELECT COUNT(*) FROM schema_version")
         if int(cur.fetchone()[0]) == 0:
-            self._conn.execute("INSERT INTO schema_version(version) VALUES(1)")
+            self._conn.execute("INSERT INTO schema_version(version) VALUES(2)")
         self._conn.commit()
+
+    def _add_column_if_missing(self, table: str, col: str, col_type: str) -> None:
+        cur = self._conn.execute(f"PRAGMA table_info({table})")
+        existing = {row[1] for row in cur.fetchall()}
+        if col not in existing:
+            self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
 
 
 def _to_jsonable(obj: Any) -> Any:
