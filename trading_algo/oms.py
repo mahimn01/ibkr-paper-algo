@@ -98,6 +98,7 @@ class OrderManager:
         # match operator intent ("stop everything until I clear it").
         assert_not_halted()
         req = req.normalized()
+        self._require_idempotency_key(req)
         self._authorize_send()
         if self._cfg.dry_run:
             self._log_error("oms.submit", "dry_run")
@@ -106,6 +107,21 @@ class OrderManager:
         self._log_order(req, res)
         self._log_status(res.order_id)
         return OMSResult(order_id=res.order_id, status=res.status)
+
+    @staticmethod
+    def _require_idempotency_key(req: OrderRequest) -> None:
+        """Defense-in-depth assertion that every send carries an idempotency key.
+
+        OrderRequest.normalized() auto-fills order_ref with a UUID4 when
+        missing, so this should fire only if a caller bypassed normalisation
+        or supplied an explicit empty string. Either case is a programmer
+        error worth raising on.
+        """
+        if not req.order_ref or not req.order_ref.strip():
+            raise ValueError(
+                "OrderRequest.order_ref must be set on submit. "
+                "Did you bypass OrderRequest.normalized()?"
+            )
 
     def log_decision(self, strategy: str, intent: TradeIntent, *, accepted: bool, reason: str | None) -> None:
         if self._store is None or self._run_id is None:
